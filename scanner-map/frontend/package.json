@@ -1,0 +1,8 @@
+{
+  "name": "scanner-map-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {"dev": "vite", "build": "vite build"},
+  "dependencies": {"react": "^18.2.0", "react-dom": "^18.2.0", "leaflet": "^1.9.4"},
+  "devDependencies": {"typescript": "^5.0.0", "vite": "^5.0.0", "@types/react": "^18.2.0", "@types/react-dom": "^18.2.0"}
+}
