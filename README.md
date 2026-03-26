@@ -80,6 +80,7 @@ If upload fails, events are still queued locally in `safe_share_queue.jsonl`.
 - Web map layer checkboxes now include **Fun-Stopper Only** and **Fun-Watcher Only** overlays.
 - App has a **Map tracked-only** checkbox to restrict rendering to just Fun-Stopper/Fun-Watcher markers.
 - A transient popup notification appears for new Fun-Stopper/Fun-Watcher detections and auto-dismisses after 8 seconds.
+- Map filters apply consistently to markers, tracing lines, and heatmaps (unchecked categories are removed from all map layers).
 
 ## 7) Notes / troubleshooting
 

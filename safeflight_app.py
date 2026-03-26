@@ -889,12 +889,17 @@ class App:
             return [r for r in history_records if apply_filters(r, self.filters())]
 
     def map_records(self):
-        # Keep Fun-Watcher marks persistent across time filters.
+        # Keep Fun-Watcher marks persistent across time, while still honoring
+        # active visibility filters (wifi/bt, OUI toggles, strength, etc.).
         with history_lock:
             persistent_watchers = [r for r in history_records if r.get("oui") == "00:25:DF"]
         base = self.filtered_records()
+        f_all_time = dict(self.filters())
+        f_all_time["time_window"] = "all"
         seen = {(r.get("id"), r.get("timestamp")) for r in base}
         for r in persistent_watchers:
+            if not apply_filters(r, f_all_time):
+                continue
             key = (r.get("id"), r.get("timestamp"))
             if key not in seen:
                 base.append(r)
