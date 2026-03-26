@@ -10,7 +10,7 @@ import time
 import webbrowser
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 
 import requests
 from bleak import BleakScanner
@@ -38,6 +38,7 @@ except Exception:
 SCAN_INTERVAL_SEC = 10
 BT_TIMEOUT_SEC = 6
 SHARE_GRID_DECIMALS = 2
+FAST_SCAN_INTERVAL_SEC = 0.5
 FEET_TO_M = 0.3048
 STOPPER_HOTSPOT_RADIUS_M = 500 * FEET_TO_M
 STOPPER_HOTSPOT_MIN_HITS = 3
@@ -226,6 +227,25 @@ def compute_fun_stopper_hotspots(records):
             })
 
     return [c for c in clusters if c["count"] >= STOPPER_HOTSPOT_MIN_HITS]
+
+
+def compute_fun_stopper_pinpoint(records):
+    # Weighted centroid using inverse estimated distance.
+    stopper_points = []
+    for r in records:
+        if r.get("oui") != "B4:1E:52":
+            continue
+        if r.get("lat") is None or r.get("lon") is None:
+            continue
+        dist = estimate_distance_m(r)
+        w = 1.0 / max(1.0, dist)
+        stopper_points.append((r["lat"], r["lon"], w))
+    if not stopper_points:
+        return None
+    wsum = sum(w for _, _, w in stopper_points)
+    lat = sum(lat * w for lat, _, w in stopper_points) / wsum
+    lon = sum(lon * w for _, lon, w in stopper_points) / wsum
+    return {"lat": lat, "lon": lon, "samples": len(stopper_points)}
 
 
 # -----------------------------
@@ -498,6 +518,7 @@ def rebuild_map(records, center=None):
     fg_heat = folium.FeatureGroup(name="Signal Heatmap")
     fg_paths = folium.FeatureGroup(name="Device Movement Paths")
     fg_hotspots = folium.FeatureGroup(name="Fun-Stopper Hotspots")
+    fg_pinpoint = folium.FeatureGroup(name="Fun-Stopper Pinpoint")
     fg_flag = folium.FeatureGroup(name="Flagged")
     fg_wifi = folium.FeatureGroup(name="Wi-Fi")
     fg_bt = folium.FeatureGroup(name="Bluetooth")
@@ -512,7 +533,8 @@ def rebuild_map(records, center=None):
             continue
         est_lat, est_lon = est_point
         device_prev[r["id"]] = r
-        device_tracks.setdefault(r["id"], []).append((r["timestamp"], est_lat, est_lon))
+        if r.get("oui") == "B4:1E:52":
+            device_tracks.setdefault(r["id"], []).append((r["timestamp"], est_lat, est_lon))
 
         color = r["marker_color"] if r["flagged"] else ("orange" if r["scan_type"] == "wifi" else "green")
         radius = 8 if r["flagged"] else 4
@@ -610,9 +632,29 @@ def rebuild_map(records, center=None):
             tooltip=f"Path: {dev_id}"
         ).add_to(fg_paths)
 
+    pinpoint = compute_fun_stopper_pinpoint(pts)
+    if pinpoint:
+        folium.Marker(
+            [pinpoint["lat"], pinpoint["lon"]],
+            icon=folium.Icon(color="darkred", icon="crosshairs", prefix="fa"),
+            tooltip="Estimated Fun-Stopper location"
+        ).add_to(fg_pinpoint)
+        folium.Circle(
+            [pinpoint["lat"], pinpoint["lon"]],
+            radius=40,
+            color="darkred",
+            fill=True,
+            fill_opacity=0.12,
+            popup=folium.Popup(
+                f"<b>Estimated Fun-Stopper location</b><br>Samples: {pinpoint['samples']}",
+                max_width=320
+            )
+        ).add_to(fg_pinpoint)
+
     fg_heat.add_to(m)
     fg_paths.add_to(m)
     fg_hotspots.add_to(m)
+    fg_pinpoint.add_to(m)
     fg_flag.add_to(m)
     fg_wifi.add_to(m)
     fg_bt.add_to(m)
@@ -632,6 +674,10 @@ class App:
         self.last_alert_ts = 0
         self.map_center = None
         self.last_hotspot_alert_ts = 0
+        self.user_name = tk.StringVar(value="")
+        self.speed_var = tk.StringVar(value="Speed: 0.0 MPH")
+        self.last_speed_point = None
+        self.last_speed_ts = None
 
         self.status_var = tk.StringVar(value="Idle")
         self.location_var = tk.StringVar(value="Location: unknown")
@@ -662,9 +708,11 @@ class App:
         self.time_window = tk.StringVar(value="all")
 
         self.webview_thread = None
+        self.webview_window = None
 
         self.build_ui()
         self.load_settings()
+        self.ensure_user_name()
         self.load_history_from_disk()
 
     def build_ui(self):
@@ -720,6 +768,10 @@ class App:
 
         ttk.Label(self.root, textvariable=self.location_var, padding=8).pack(anchor="w")
         ttk.Label(self.root, textvariable=self.count_var, padding=8).pack(anchor="w")
+        footer = ttk.Frame(self.root, padding=4)
+        footer.pack(fill="x")
+        ttk.Label(footer, textvariable=self.speed_var).pack(side="left")
+        ttk.Label(footer, textvariable=self.user_name).pack(side="right")
 
         cols = ("timestamp", "type", "kind", "name", "id", "signal", "bucket", "label")
         self.tree = ttk.Treeview(self.root, columns=cols, show="headings", height=30)
@@ -735,6 +787,7 @@ class App:
             "share_mode": self.share_mode.get(),
             "endpoint": self.endpoint_var.get(),
             "token": self.token_var.get(),
+            "user_name": self.user_name.get().replace("User: ", "", 1).strip(),
             "auto_map_update": self.auto_map_update.get(),
             "heading_alerts": self.heading_alerts.get(),
             "time_window": self.time_window.get(),
@@ -762,6 +815,7 @@ class App:
             self.share_mode.set(d.get("share_mode", "local_only"))
             self.endpoint_var.set(d.get("endpoint", ""))
             self.token_var.set(d.get("token", ""))
+            self.user_name.set(d.get("user_name", ""))
             self.auto_map_update.set(d.get("auto_map_update", False))
             self.heading_alerts.set(d.get("heading_alerts", True))
             self.time_window.set(d.get("time_window", "all"))
@@ -842,6 +896,36 @@ class App:
             with history_lock:
                 history_records.extend(loaded)
 
+    def ensure_user_name(self):
+        existing = self.user_name.get().replace("User: ", "", 1).strip()
+        if existing:
+            self.user_name.set(f"User: {existing}")
+            return
+        entered = simpledialog.askstring("Welcome to SafeFlight", "Enter your username:")
+        entered = (entered or "").strip()
+        if not entered:
+            entered = "Pilot"
+        self.user_name.set(f"User: {entered}")
+        self.save_settings()
+
+    def update_speed(self, cur_loc):
+        if cur_loc.get("lat") is None or cur_loc.get("lon") is None:
+            self.speed_var.set("Speed: 0.0 MPH")
+            return
+        now = time.time()
+        if self.last_speed_point is None or self.last_speed_ts is None:
+            self.last_speed_point = (cur_loc["lat"], cur_loc["lon"])
+            self.last_speed_ts = now
+            self.speed_var.set("Speed: 0.0 MPH")
+            return
+        dt_sec = max(0.001, now - self.last_speed_ts)
+        meters = haversine_m(self.last_speed_point[0], self.last_speed_point[1], cur_loc["lat"], cur_loc["lon"])
+        mps = meters / dt_sec
+        mph = mps * 2.2369362921
+        self.speed_var.set(f"Speed: {mph:.1f} MPH")
+        self.last_speed_point = (cur_loc["lat"], cur_loc["lon"])
+        self.last_speed_ts = now
+
     def recenter_map(self):
         if self.last_location and self.last_location.get("lat") is not None:
             self.map_center = (self.last_location["lat"], self.last_location["lon"])
@@ -863,9 +947,18 @@ class App:
             messagebox.showinfo("Map", "No map yet. Click Update Map after scanning.")
             return
 
+        map_url = OUT_MAP.resolve().as_uri() + f"?t={int(time.time())}"
+
+        if self.webview_window is not None:
+            try:
+                self.webview_window.load_url(map_url)
+                return
+            except Exception:
+                self.webview_window = None
+
         def _run():
             try:
-                webview.create_window("Live Map", OUT_MAP.resolve().as_uri(), width=1100, height=700)
+                self.webview_window = webview.create_window("Live Map", map_url, width=1100, height=700)
                 webview.start()
             except Exception:
                 pass
@@ -981,6 +1074,7 @@ class App:
                 self.location_var.set(
                     f"Location src={loc['source']} | lat={loc['lat']} lon={loc['lon']} | {loc.get('text') or ''}"
                 )
+                self.root.after(0, lambda l=loc: self.update_speed(l))
 
                 wifi = parse_netsh_wifi()
                 bt = asyncio.run(scan_bluetooth(BT_TIMEOUT_SEC))
@@ -1021,7 +1115,9 @@ class App:
             except Exception as e:
                 self.status_var.set(f"Error: {e}")
 
-            for _ in range(SCAN_INTERVAL_SEC * 10):
+            has_stopper = any(r.get("oui") == "B4:1E:52" for r in batch) if "batch" in locals() else False
+            wait_sec = FAST_SCAN_INTERVAL_SEC if has_stopper else SCAN_INTERVAL_SEC
+            for _ in range(int(wait_sec * 10)):
                 if not self.running:
                     break
                 time.sleep(0.1)

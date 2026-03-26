@@ -68,9 +68,13 @@ If upload fails, events are still queued locally in `safe_share_queue.jsonl`.
 - Click a marker for a detailed report popup (ID/MAC, signal bucket, OUI, location source, and more).
 - Device points are plotted as an **estimated signal origin** (using signal strength and movement direction heuristics).
 - Moved devices render a **sequential path line** that connects first → second → third sightings in order.
+- Sequential path tracing is restricted to **Fun-Stopper** detections only.
 - OUI `00:25:DF` is shown in **blue** as **Fun-Watcher** and remains visible across time.
 - OUI `B4:1E:52` is shown in **red** as **Fun-Stopper** and uses non-permanent detection markers with detection date in popup text.
 - If Fun-Stopper detections cluster (3+ sightings within 500 ft), the map marks a hotspot area and the app alerts when you approach it.
+- When a Fun-Stopper is detected, scan cadence increases to **0.5 seconds** for higher-resolution signal/location logging.
+- The app asks for a username on first launch and remembers it for future sessions.
+- Bottom-left footer shows current estimated movement speed in **MPH**.
 
 ## 7) Notes / troubleshooting
 
