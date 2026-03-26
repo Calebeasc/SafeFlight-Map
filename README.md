@@ -148,6 +148,7 @@ Important notes:
 - Use **Re-center** to center map around current location.
 - Enable **Auto map update** if you want map refresh each scan cycle.
 - Use **Settings** to switch map display mode between **car** and **bike** reporter icons.
+- Use **Clear Logs** to remove all non Fun-Stopper/Fun-Watcher signals from memory and local storage.
 - The map now includes a **Signal Heatmap** layer (small/intensity-weighted by signal strength).
 - Hover a marker to preview **name + device type + reported time**.
 - Click a marker for a detailed report popup (ID/MAC, signal bucket, OUI, location source, and more).

@@ -993,6 +993,7 @@ class App:
         ttk.Button(top, text="Open Browser Map", command=self.open_map_browser).pack(side="left", padx=4)
         ttk.Button(top, text="Open Embedded Map", command=self.open_map_embedded).pack(side="left", padx=4)
         ttk.Button(top, text="Settings", command=self.open_settings_dialog).pack(side="left", padx=4)
+        ttk.Button(top, text="Clear Logs", command=self.clear_non_tracked_logs).pack(side="left", padx=4)
         ttk.Button(top, text="Update Map", command=self.refresh_map).pack(side="left", padx=4)
         ttk.Button(top, text="Re-center", command=self.recenter_map).pack(side="left", padx=4)
 
@@ -1177,6 +1178,55 @@ class App:
             text="Save",
             command=lambda: (self.save_settings(), self.refresh_map(), win.destroy())
         ).pack(anchor="e", pady=(12, 0))
+
+    def clear_non_tracked_logs(self):
+        keep_ouis = {"B4:1E:52", "00:25:DF"}
+        if not messagebox.askyesno(
+            "Clear Logs",
+            "Delete all non Fun-Stopper/Fun-Watcher signals from memory and local log files?"
+        ):
+            return
+
+        with history_lock:
+            kept = [r for r in history_records if r.get("oui") in keep_ouis]
+            history_records.clear()
+            history_records.extend(kept)
+
+        # Rewrite CSV with only kept records.
+        ensure_local_header()
+        with OUT_CSV.open("w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=[
+                "timestamp", "scan_type", "device_kind", "id", "name", "signal", "strength_bucket",
+                "misc", "oui", "flagged", "flag_label", "marker_color",
+                "lat", "lon", "location_source", "location_text", "location_accuracy_m", "reporter"
+            ])
+            w.writeheader()
+            for r in kept:
+                w.writerow(r)
+
+        # Rewrite JSONL with only kept records.
+        with OUT_JSONL.open("w", encoding="utf-8") as f:
+            for r in kept:
+                f.write(json.dumps(r, ensure_ascii=False) + "\\n")
+
+        # Prune SQLite raw observations and rebuild encounters from kept data.
+        con = sqlite3.connect(DB_FILE)
+        try:
+            cur = con.cursor()
+            cur.execute("DELETE FROM raw_observations WHERE oui NOT IN (?, ?)", ("B4:1E:52", "00:25:DF"))
+            cur.execute("DELETE FROM encounters")
+            con.commit()
+        finally:
+            con.close()
+        insert_encounters(build_encounters(kept))
+
+        # Refresh table/map views.
+        for iid in self.tree.get_children():
+            self.tree.delete(iid)
+        self.add_rows(self.filtered_records())
+        self.update_counts()
+        self.refresh_map()
+        self.status_var.set("Cleared non-tracked logs (kept Fun-Stopper/Fun-Watcher).")
 
     def load_history_from_disk(self):
         if not OUT_JSONL.exists():
