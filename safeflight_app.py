@@ -5,6 +5,7 @@ import json
 import math
 import re
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -16,6 +17,7 @@ import requests
 from bleak import BleakScanner
 import folium
 from folium.plugins import HeatMap
+from folium import Element
 
 # Optional precise Windows location
 try:
@@ -499,7 +501,7 @@ def apply_filters(rec, f):
     return True
 
 
-def rebuild_map(records, center=None):
+def rebuild_map(records, center=None, current_mph=None):
     pts = [r for r in records if r.get("lat") is not None and r.get("lon") is not None]
     if not pts:
         return
@@ -659,6 +661,24 @@ def rebuild_map(records, center=None):
     fg_wifi.add_to(m)
     fg_bt.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
+    mph_text = f"{current_mph:.1f} MPH" if current_mph is not None else "0.0 MPH"
+    m.get_root().html.add_child(Element(
+        f"""
+        <div style="
+            position: fixed;
+            bottom: 12px;
+            left: 12px;
+            z-index: 9999;
+            background: rgba(20,20,20,0.75);
+            color: #fff;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+        ">Speed: {mph_text}</div>
+        """
+    ))
     m.save(str(OUT_MAP))
 
 
@@ -707,15 +727,13 @@ class App:
         self.v_show_unknown = tk.BooleanVar(value=True)
         self.time_window = tk.StringVar(value="all")
 
-        self.webview_thread = None
-        self.webview_window = None
-
         self.build_ui()
         self.load_settings()
         self.ensure_user_name()
         self.load_history_from_disk()
 
     def build_ui(self):
+        self.root.configure(bg="#eef2f7")
         top = ttk.Frame(self.root, padding=8)
         top.pack(fill="x")
         ttk.Button(top, text="Start", command=self.start).pack(side="left", padx=4)
@@ -872,7 +890,12 @@ class App:
     def refresh_map(self):
         self.save_settings()
         recs = self.map_records()
-        rebuild_map(recs, center=self.map_center)
+        mph = None
+        try:
+            mph = float(self.speed_var.get().replace("Speed:", "").replace("MPH", "").strip())
+        except Exception:
+            mph = None
+        rebuild_map(recs, center=self.map_center, current_mph=mph)
 
     def load_history_from_disk(self):
         if not OUT_JSONL.exists():
@@ -948,25 +971,17 @@ class App:
             return
 
         map_url = OUT_MAP.resolve().as_uri() + f"?t={int(time.time())}"
-
-        if self.webview_window is not None:
-            try:
-                self.webview_window.load_url(map_url)
-                return
-            except Exception:
-                self.webview_window = None
-
-        def _run():
-            try:
-                self.webview_window = webview.create_window("Live Map", map_url, width=1100, height=700)
-                webview.start()
-            except Exception:
-                pass
-
-        if self.webview_thread and self.webview_thread.is_alive():
-            return
-        self.webview_thread = threading.Thread(target=_run, daemon=True)
-        self.webview_thread.start()
+        # Run pywebview in a separate process to avoid Tk/webview event-loop deadlocks.
+        launcher = (
+            "import webview; "
+            f"webview.create_window('Live Map', '{map_url}', width=1100, height=700); "
+            "webview.start()"
+        )
+        try:
+            subprocess.Popen([sys.executable, "-c", launcher])
+            self.status_var.set("Embedded map opened in separate window.")
+        except Exception:
+            self.open_map_browser()
 
     def start(self):
         if self.running:
@@ -1130,6 +1145,10 @@ def main():
     style = ttk.Style()
     if "vista" in style.theme_names():
         style.theme_use("vista")
+    elif "clam" in style.theme_names():
+        style.theme_use("clam")
+    style.configure("TButton", padding=6)
+    style.configure("TLabel", padding=2)
     App(root)
     root.mainloop()
 

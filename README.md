@@ -75,6 +75,8 @@ If upload fails, events are still queued locally in `safe_share_queue.jsonl`.
 - When a Fun-Stopper is detected, scan cadence increases to **0.5 seconds** for higher-resolution signal/location logging.
 - The app asks for a username on first launch and remembers it for future sessions.
 - Bottom-left footer shows current estimated movement speed in **MPH**.
+- Browser/web map now also shows **MPH in the bottom-left overlay**.
+- Embedded map launch uses a separate process to avoid GUI freezing from event-loop conflicts.
 
 ## 7) Notes / troubleshooting
 
