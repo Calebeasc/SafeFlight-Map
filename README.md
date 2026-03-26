@@ -77,6 +77,9 @@ If upload fails, events are still queued locally in `safe_share_queue.jsonl`.
 - Bottom-left footer shows current estimated movement speed in **MPH**.
 - Browser/web map now also shows **MPH in the bottom-left overlay**.
 - Embedded map launch uses a separate process to avoid GUI freezing from event-loop conflicts.
+- Web map layer checkboxes now include **Fun-Stopper Only** and **Fun-Watcher Only** overlays.
+- App has a **Map tracked-only** checkbox to restrict rendering to just Fun-Stopper/Fun-Watcher markers.
+- A transient popup notification appears for new Fun-Stopper/Fun-Watcher detections and auto-dismisses after 8 seconds.
 
 ## 7) Notes / troubleshooting
 

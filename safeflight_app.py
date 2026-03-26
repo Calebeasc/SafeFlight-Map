@@ -522,6 +522,8 @@ def rebuild_map(records, center=None, current_mph=None):
     fg_paths = folium.FeatureGroup(name="Device Movement Paths")
     fg_hotspots = folium.FeatureGroup(name="Fun-Stopper Hotspots")
     fg_pinpoint = folium.FeatureGroup(name="Fun-Stopper Pinpoint")
+    fg_stoppers = folium.FeatureGroup(name="Fun-Stopper Only")
+    fg_watchers = folium.FeatureGroup(name="Fun-Watcher Only")
     fg_flag = folium.FeatureGroup(name="Flagged")
     fg_wifi = folium.FeatureGroup(name="Wi-Fi")
     fg_bt = folium.FeatureGroup(name="Bluetooth")
@@ -585,6 +587,10 @@ def rebuild_map(records, center=None, current_mph=None):
         )
         if r["flagged"]:
             mk.add_to(fg_flag)
+        if r.get("oui") == "B4:1E:52":
+            mk.add_to(fg_stoppers)
+        elif r.get("oui") == "00:25:DF":
+            mk.add_to(fg_watchers)
         if r["scan_type"] == "wifi":
             mk.add_to(fg_wifi)
         else:
@@ -658,6 +664,8 @@ def rebuild_map(records, center=None, current_mph=None):
     fg_paths.add_to(m)
     fg_hotspots.add_to(m)
     fg_pinpoint.add_to(m)
+    fg_stoppers.add_to(m)
+    fg_watchers.add_to(m)
     fg_flag.add_to(m)
     fg_wifi.add_to(m)
     fg_bt.add_to(m)
@@ -699,6 +707,7 @@ class App:
         self.speed_var = tk.StringVar(value="Speed: 0.0 MPH")
         self.last_speed_point = None
         self.last_speed_ts = None
+        self.last_detection_toast_ts = {}
 
         self.status_var = tk.StringVar(value="Idle")
         self.location_var = tk.StringVar(value="Location: unknown")
@@ -726,6 +735,7 @@ class App:
         self.v_show_medium = tk.BooleanVar(value=True)
         self.v_show_weak = tk.BooleanVar(value=True)
         self.v_show_unknown = tk.BooleanVar(value=True)
+        self.v_map_tracked_only = tk.BooleanVar(value=False)
         self.time_window = tk.StringVar(value="all")
 
         self.build_ui()
@@ -746,6 +756,7 @@ class App:
 
         ttk.Checkbutton(top, text="Auto map update", variable=self.auto_map_update, command=self.save_settings).pack(side="left", padx=10)
         ttk.Checkbutton(top, text="Heading alerts", variable=self.heading_alerts, command=self.save_settings).pack(side="left", padx=10)
+        ttk.Checkbutton(top, text="Map tracked-only", variable=self.v_map_tracked_only, command=lambda: (self.save_settings(), self.refresh_map())).pack(side="left", padx=10)
 
         ttk.Label(top, text="Time").pack(side="left", padx=(16, 4))
         tw = ttk.Combobox(top, textvariable=self.time_window, values=["all", "1h", "5m"], width=8, state="readonly")
@@ -823,6 +834,7 @@ class App:
             "show_medium": self.v_show_medium.get(),
             "show_weak": self.v_show_weak.get(),
             "show_unknown": self.v_show_unknown.get(),
+            "map_tracked_only": self.v_map_tracked_only.get(),
         }
         SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
@@ -851,6 +863,7 @@ class App:
             self.v_show_medium.set(d.get("show_medium", True))
             self.v_show_weak.set(d.get("show_weak", True))
             self.v_show_unknown.set(d.get("show_unknown", True))
+            self.v_map_tracked_only.set(d.get("map_tracked_only", False))
         except Exception:
             pass
 
@@ -886,6 +899,8 @@ class App:
             if key not in seen:
                 base.append(r)
                 seen.add(key)
+        if self.v_map_tracked_only.get():
+            base = [r for r in base if r.get("oui") in {"B4:1E:52", "00:25:DF"}]
         return base
 
     def refresh_map(self):
@@ -949,6 +964,33 @@ class App:
         self.speed_var.set(f"Speed: {mph:.1f} MPH")
         self.last_speed_point = (cur_loc["lat"], cur_loc["lon"])
         self.last_speed_ts = now
+
+    def show_detection_toast(self, text):
+        toast = tk.Toplevel(self.root)
+        toast.overrideredirect(True)
+        toast.attributes("-topmost", True)
+        x = self.root.winfo_rootx() + 30
+        y = self.root.winfo_rooty() + 80
+        toast.geometry(f"+{x}+{y}")
+        frm = ttk.Frame(toast, padding=10)
+        frm.pack(fill="both", expand=True)
+        ttk.Label(frm, text=text).pack()
+        toast.after(8000, toast.destroy)
+
+    def maybe_toast_new_tracked_detection(self, batch):
+        now = time.time()
+        for r in batch:
+            oui = r.get("oui")
+            if oui not in {"B4:1E:52", "00:25:DF"}:
+                continue
+            key = (oui, r.get("id"))
+            last = self.last_detection_toast_ts.get(key, 0)
+            if now - last < 20:
+                continue
+            self.last_detection_toast_ts[key] = now
+            label = "Fun-Stopper" if oui == "B4:1E:52" else "Fun-Watcher"
+            when = r.get("timestamp", "")[:19]
+            self.root.after(0, lambda t=f"New {label} detected at {when}": self.show_detection_toast(t))
 
     def recenter_map(self):
         if self.last_location and self.last_location.get("lat") is not None:
@@ -1118,6 +1160,7 @@ class App:
                 append_local_exact(batch)
                 with history_lock:
                     history_records.extend(batch)
+                self.maybe_toast_new_tracked_detection(batch)
 
                 if self.share_mode.get() == "safe_share":
                     append_safe_queue(batch)
