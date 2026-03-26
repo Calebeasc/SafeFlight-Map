@@ -57,6 +57,78 @@ In **Sharing** panel:
 
 If upload fails, events are still queued locally in `safe_share_queue.jsonl`.
 
+### Endpoint field (detailed)
+
+The **Endpoint** should be the full HTTPS URL for your ingestion API route.
+
+Examples:
+
+- `https://api.yourdomain.com/safeflight/events`
+- `https://example.org/v1/device-events`
+
+Best practices:
+
+1. Use **HTTPS** (not plain HTTP) for security.
+2. Paste the **full path**, not just a domain.
+3. Confirm your endpoint accepts JSON with the format:
+
+```json
+{
+  "events": [
+    {
+      "timestamp_hour": "2026-03-26T18:00:00",
+      "scan_type": "wifi|bluetooth",
+      "device_kind": "wifi_ap|bluetooth_speaker_like|bluetooth_other",
+      "category": "Fun-Stopper|Fun-Watcher|other",
+      "oui_flagged_only": "B4:1E:52|00:25:DF|null",
+      "strength_bucket": "strong|medium|weak|unknown",
+      "grid_lat": 37.77,
+      "grid_lon": -122.42,
+      "count": 1
+    }
+  ]
+}
+```
+
+4. If your backend expects a different schema, adapt backend parsing or app code accordingly.
+5. If endpoint is blank, upload is skipped and data remains local/queued.
+
+### Token field (detailed)
+
+The **Token** is optional unless your API requires authentication.
+
+How it is sent:
+
+- If token is non-empty, app adds:
+  - `Authorization: Bearer <your_token>`
+- If token is empty, no Authorization header is sent.
+
+Token examples:
+
+- JWT (typical): `eyJhbGciOiJIUzI1NiIs...`
+- Opaque API key: `sk_live_abc123...`
+
+Important notes:
+
+1. Enter only the raw token value (do **not** include `Bearer ` prefix manually).
+2. Token is stored in `app_settings.json` for convenience; treat this file as sensitive.
+3. For stronger security, use short-lived tokens and rotate regularly.
+4. If you get 401/403 responses, verify:
+   - token validity/expiry
+   - correct environment (dev/staging/prod endpoint)
+   - required scopes/permissions on your backend
+
+### Quick Safe Share setup checklist
+
+1. Select **Safe share** radio button.
+2. Paste full **Endpoint** URL.
+3. Paste **Token** (if required by server).
+4. Start scanning.
+5. Watch status text:
+   - `safe upload OK: HTTP 2xx` means uploads are succeeding.
+   - `safe queued, upload issue: ...` means local queueing continues and upload failed.
+6. Inspect `safe_share_queue.jsonl` for queued events if troubleshooting.
+
 ## 6) Filters and map controls
 
 - Use checkboxes to filter Wi-Fi/Bluetooth types, flagged OUIs, and signal buckets.
