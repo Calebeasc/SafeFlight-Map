@@ -66,6 +66,8 @@ If upload fails, events are still queued locally in `safe_share_queue.jsonl`.
 - The map now includes a **Signal Heatmap** layer (small/intensity-weighted by signal strength).
 - Hover a marker to preview **name + device type + reported time**.
 - Click a marker for a detailed report popup (ID/MAC, signal bucket, OUI, location source, and more).
+- Device points are plotted as an **estimated signal origin** (using signal strength and movement direction heuristics).
+- Moved devices render a **sequential path line** that connects first → second → third sightings in order.
 
 ## 7) Notes / troubleshooting
 

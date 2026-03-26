@@ -134,6 +134,66 @@ def angle_diff_deg(a, b):
     return min(d, 360 - d)
 
 
+def destination_point(lat, lon, bearing_deg_value, distance_m):
+    # Great-circle destination from start point, bearing, distance.
+    R = 6371000.0
+    brng = math.radians(bearing_deg_value % 360)
+    p1 = math.radians(lat)
+    l1 = math.radians(lon)
+    ang = distance_m / R
+
+    p2 = math.asin(math.sin(p1) * math.cos(ang) + math.cos(p1) * math.sin(ang) * math.cos(brng))
+    l2 = l1 + math.atan2(
+        math.sin(brng) * math.sin(ang) * math.cos(p1),
+        math.cos(ang) - math.sin(p1) * math.sin(p2)
+    )
+    return math.degrees(p2), math.degrees(l2)
+
+
+def estimate_distance_m(rec):
+    # Very rough range model for visualization only.
+    sig = rec.get("signal")
+    if sig is None:
+        return 35.0
+    if rec.get("scan_type") == "wifi":
+        # Map Wi-Fi quality % to approximate meters (stronger = closer).
+        return max(4.0, min(120.0, 120.0 - (sig * 1.1)))
+    # Bluetooth RSSI distance estimate via log-distance path loss.
+    tx_power = -59.0
+    n = 2.2
+    return max(2.0, min(120.0, 10 ** ((tx_power - float(sig)) / (10.0 * n))))
+
+
+def estimate_signal_origin(rec, prev_for_device):
+    lat, lon = rec.get("lat"), rec.get("lon")
+    if lat is None or lon is None:
+        return None, None
+
+    est_dist = estimate_distance_m(rec)
+    if not prev_for_device:
+        # Unknown bearing; default north-ish for stable single-point placement.
+        b = 0.0
+        return destination_point(lat, lon, b, est_dist), est_dist
+
+    p_lat, p_lon = prev_for_device.get("lat"), prev_for_device.get("lon")
+    p_sig = prev_for_device.get("signal")
+    if p_lat is None or p_lon is None:
+        b = 0.0
+        return destination_point(lat, lon, b, est_dist), est_dist
+
+    move_bearing = bearing_deg(p_lat, p_lon, lat, lon)
+    if rec.get("signal") is None or p_sig is None:
+        inferred_bearing = move_bearing
+    elif rec["signal"] >= p_sig:
+        # Signal improved while moving: device likely ahead.
+        inferred_bearing = move_bearing
+    else:
+        # Signal weakened while moving: device likely behind us.
+        inferred_bearing = (move_bearing + 180.0) % 360.0
+
+    return destination_point(lat, lon, inferred_bearing, est_dist), est_dist
+
+
 # -----------------------------
 # Location
 # -----------------------------
@@ -402,12 +462,23 @@ def rebuild_map(records, center=None):
     ).add_to(m)
 
     fg_heat = folium.FeatureGroup(name="Signal Heatmap")
+    fg_paths = folium.FeatureGroup(name="Device Movement Paths")
     fg_flag = folium.FeatureGroup(name="Flagged")
     fg_wifi = folium.FeatureGroup(name="Wi-Fi")
     fg_bt = folium.FeatureGroup(name="Bluetooth")
     heat_points = []
+    device_prev = {}
+    device_tracks = {}
 
     for r in pts:
+        prev_for_device = device_prev.get(r["id"])
+        est_point, est_dist = estimate_signal_origin(r, prev_for_device)
+        if est_point is None:
+            continue
+        est_lat, est_lon = est_point
+        device_prev[r["id"]] = r
+        device_tracks.setdefault(r["id"], []).append((r["timestamp"], est_lat, est_lon))
+
         color = r["marker_color"] if r["flagged"] else ("orange" if r["scan_type"] == "wifi" else "green")
         radius = 8 if r["flagged"] else 4
         sig = f"{r['signal']}%" if r["scan_type"] == "wifi" and r["signal"] is not None else (
@@ -419,7 +490,7 @@ def rebuild_map(records, center=None):
             weight = max(0.05, min(1.0, (r["signal"] + 100) / 60))
         else:
             weight = 0.1
-        heat_points.append([r["lat"], r["lon"], weight])
+        heat_points.append([est_lat, est_lon, weight])
 
         hover_preview = (
             f"{r['name'] or '(unnamed)'} | {r['device_kind']} | {r['timestamp']}"
@@ -438,10 +509,12 @@ def rebuild_map(records, center=None):
             f"<b>Location Source:</b> {r.get('location_source') or 'unknown'}<br>"
             f"<b>Location Text:</b> {r.get('location_text') or 'unknown'}<br>"
             f"<b>Accuracy (m):</b> {r.get('location_accuracy_m') if r.get('location_accuracy_m') is not None else 'unknown'}<br>"
+            f"<b>Estimated Range (m):</b> {round(est_dist, 1)}<br>"
+            f"<b>Estimated Signal Origin:</b> {est_lat:.6f}, {est_lon:.6f}<br>"
             f"<b>Misc:</b> {r.get('misc') or '-'}"
         )
         mk = folium.CircleMarker(
-            [r["lat"], r["lon"]],
+            [est_lat, est_lon],
             radius=radius,
             color=color,
             fill=True,
@@ -466,7 +539,21 @@ def rebuild_map(records, center=None):
             max_zoom=18
         ).add_to(fg_heat)
 
+    for dev_id, seq in device_tracks.items():
+        if len(seq) < 2:
+            continue
+        seq_sorted = sorted(seq, key=lambda t: parse_iso(t[0]) or dt.datetime.min.replace(tzinfo=dt.timezone.utc))
+        coords = [(lat, lon) for _, lat, lon in seq_sorted]
+        folium.PolyLine(
+            coords,
+            weight=2,
+            color="#00c2ff",
+            opacity=0.8,
+            tooltip=f"Path: {dev_id}"
+        ).add_to(fg_paths)
+
     fg_heat.add_to(m)
+    fg_paths.add_to(m)
     fg_flag.add_to(m)
     fg_wifi.add_to(m)
     fg_bt.add_to(m)
