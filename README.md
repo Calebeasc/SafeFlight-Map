@@ -47,6 +47,18 @@ The app writes output files in the same folder:
 - `live_signal_map.html` — generated map
 - `safe_share_queue.jsonl` — safe-share queue events
 - `app_settings.json` — persisted UI/settings state
+- `safeflight_observations.db` — SQLite database for raw observations + encounter summaries
+
+### Database model (high level)
+
+- `raw_observations`: high-rate truth data (timestamp ms, lat/lon, speed, heading, target, type, rssi, channel/misc, oui)
+- `encounters`: burst-compressed windows per target with peak point and confidence
+
+Mapping behavior:
+
+- Raw observations are collected quickly and stored.
+- Map markers are generated from **encounters** (compressed bursts), not one marker per raw hit.
+- Heatmap is aggregated from **100m grid cells** for cleaner display at highway speed.
 
 ## 5) Sharing modes
 

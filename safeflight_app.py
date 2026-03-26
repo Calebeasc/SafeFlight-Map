@@ -5,6 +5,7 @@ import json
 import math
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -56,9 +57,118 @@ OUT_JSONL = Path("local_exact_log.jsonl")
 OUT_MAP = Path("live_signal_map.html")
 SAFE_QUEUE_JSONL = Path("safe_share_queue.jsonl")
 SETTINGS_FILE = Path("app_settings.json")
+DB_FILE = Path("safeflight_observations.db")
 
 history_records = []
 history_lock = threading.Lock()
+
+
+def init_db():
+    con = sqlite3.connect(DB_FILE)
+    try:
+        cur = con.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS raw_observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                t_ms INTEGER,
+                lat REAL,
+                lon REAL,
+                speed_mps REAL,
+                heading REAL,
+                target_id TEXT,
+                type TEXT,
+                rssi REAL,
+                channel TEXT,
+                oui TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS encounters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                encounter_id TEXT,
+                target_id TEXT,
+                start_t TEXT,
+                end_t TEXT,
+                count_hits INTEGER,
+                rssi_max REAL,
+                t_at_rssi_max TEXT,
+                peak_lat REAL,
+                peak_lon REAL,
+                confidence REAL
+            )
+            """
+        )
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_encounter_id ON encounters(encounter_id)")
+        con.commit()
+    finally:
+        con.close()
+
+
+def insert_raw_batch(records, speed_mps=None, heading=None):
+    if not records:
+        return
+    con = sqlite3.connect(DB_FILE)
+    try:
+        cur = con.cursor()
+        for r in records:
+            t = parse_iso(r.get("timestamp", ""))
+            t_ms = int(t.timestamp() * 1000) if t else None
+            cur.execute(
+                """
+                INSERT INTO raw_observations
+                (t_ms, lat, lon, speed_mps, heading, target_id, type, rssi, channel, oui)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    t_ms,
+                    r.get("lat"),
+                    r.get("lon"),
+                    speed_mps,
+                    heading,
+                    r.get("id"),
+                    r.get("scan_type"),
+                    r.get("signal"),
+                    r.get("misc"),
+                    r.get("oui"),
+                ),
+            )
+        con.commit()
+    finally:
+        con.close()
+
+
+def insert_encounters(encounters):
+    if not encounters:
+        return
+    con = sqlite3.connect(DB_FILE)
+    try:
+        cur = con.cursor()
+        for e in encounters:
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO encounters
+                (encounter_id, target_id, start_t, end_t, count_hits, rssi_max, t_at_rssi_max, peak_lat, peak_lon, confidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    e.get("encounter_id"),
+                    e.get("target_id"),
+                    e.get("start_t"),
+                    e.get("end_t"),
+                    e.get("count_hits"),
+                    e.get("rssi_max"),
+                    e.get("t_at_rssi_max"),
+                    e.get("peak_lat"),
+                    e.get("peak_lon"),
+                    e.get("confidence"),
+                ),
+            )
+        con.commit()
+    finally:
+        con.close()
 
 
 def now_iso():
@@ -249,6 +359,105 @@ def compute_fun_stopper_pinpoint(records):
     lat = sum(lat * w for lat, _, w in stopper_points) / wsum
     lon = sum(lon * w for _, lon, w in stopper_points) / wsum
     return {"lat": lat, "lon": lon, "samples": len(stopper_points)}
+
+
+def build_encounters(records):
+    grouped = {}
+    for r in records:
+        if r.get("lat") is None or r.get("lon") is None:
+            continue
+        grouped.setdefault(r.get("id"), []).append(r)
+
+    encounters = []
+    for target_id, recs in grouped.items():
+        recs = sorted(recs, key=lambda x: parse_iso(x.get("timestamp", "")) or dt.datetime.min.replace(tzinfo=dt.timezone.utc))
+        cur = []
+        last_t = None
+        for r in recs:
+            t = parse_iso(r.get("timestamp", ""))
+            if not t:
+                continue
+            gap_limit = 2.0 if r.get("scan_type") == "wifi" else 1.0
+            if not cur:
+                cur = [r]
+                last_t = t
+                continue
+            gap = (t - last_t).total_seconds()
+            if gap <= gap_limit:
+                cur.append(r)
+            else:
+                encounters.append(summarize_encounter(cur))
+                cur = [r]
+            last_t = t
+        if cur:
+            encounters.append(summarize_encounter(cur))
+    return [e for e in encounters if e]
+
+
+def summarize_encounter(recs):
+    if not recs:
+        return None
+    ts = [parse_iso(r.get("timestamp", "")) for r in recs]
+    ts = [t for t in ts if t]
+    if not ts:
+        return None
+    max_rec = max(recs, key=lambda r: (r.get("signal") if r.get("signal") is not None else -999))
+    start_t = min(ts)
+    end_t = max(ts)
+    duration = max(0.1, (end_t - start_t).total_seconds())
+    count_hits = len(recs)
+    rssi_max = max_rec.get("signal") if max_rec.get("signal") is not None else -100
+    speed_penalty = 0.2  # conservative baseline
+    base = max(0.0, min(1.0, (rssi_max + 95) / 55))
+    hit_bonus = min(0.4, count_hits / 20.0)
+    dur_bonus = min(0.3, duration / 30.0)
+    confidence = max(0.0, min(1.0, base + hit_bonus + dur_bonus - speed_penalty))
+    return {
+        "encounter_id": f"{max_rec.get('id')}_{int(start_t.timestamp())}",
+        "target_id": max_rec.get("id"),
+        "start_t": start_t.isoformat(),
+        "end_t": end_t.isoformat(),
+        "count_hits": count_hits,
+        "rssi_max": rssi_max,
+        "t_at_rssi_max": max_rec.get("timestamp"),
+        "peak_lat": max_rec.get("lat"),
+        "peak_lon": max_rec.get("lon"),
+        "scan_type": max_rec.get("scan_type"),
+        "device_kind": max_rec.get("device_kind"),
+        "name": max_rec.get("name"),
+        "oui": max_rec.get("oui"),
+        "flagged": max_rec.get("flagged"),
+        "flag_label": max_rec.get("flag_label"),
+        "marker_color": max_rec.get("marker_color"),
+        "strength_bucket": max_rec.get("strength_bucket"),
+        "location_source": max_rec.get("location_source"),
+        "location_text": max_rec.get("location_text"),
+        "location_accuracy_m": max_rec.get("location_accuracy_m"),
+        "misc": max_rec.get("misc"),
+        "confidence": confidence,
+        "path": [(r.get("lat"), r.get("lon")) for r in recs if r.get("lat") is not None and r.get("lon") is not None],
+    }
+
+
+def aggregate_heat_cells(records, cell_m=100):
+    cells = {}
+    for r in records:
+        lat, lon = r.get("lat"), r.get("lon")
+        if lat is None or lon is None:
+            continue
+        lat_step = cell_m / 111320.0
+        lon_step = cell_m / max(1.0, 111320.0 * math.cos(math.radians(lat)))
+        gx = int(round(lat / lat_step))
+        gy = int(round(lon / lon_step))
+        key = (gx, gy)
+        sig = r.get("signal")
+        weight = max(0.01, (10 ** (float(sig) / 10.0))) if sig is not None else 0.01
+        c = cells.setdefault(key, {"lat": gx * lat_step, "lon": gy * lon_step, "sum_weight": 0.0, "count": 0, "max_rssi": -999})
+        c["sum_weight"] += weight
+        c["count"] += 1
+        if sig is not None:
+            c["max_rssi"] = max(c["max_rssi"], sig)
+    return list(cells.values())
 
 
 # -----------------------------
@@ -506,8 +715,11 @@ def rebuild_map(records, center=None, current_mph=None):
     pts = [r for r in records if r.get("lat") is not None and r.get("lon") is not None]
     if not pts:
         return
+    encounters = build_encounters(pts)
+    if not encounters:
+        return
     if center is None:
-        center = (pts[-1]["lat"], pts[-1]["lon"])
+        center = (encounters[-1]["peak_lat"], encounters[-1]["peak_lon"])
 
     m = folium.Map(location=[center[0], center[1]], zoom_start=15, tiles=None)
     folium.TileLayer("CartoDB Positron", name="Light").add_to(m)
@@ -530,50 +742,53 @@ def rebuild_map(records, center=None, current_mph=None):
     heat_points = []
     device_prev = {}
     device_tracks = {}
+    heat_cells = aggregate_heat_cells(pts, cell_m=100)
 
-    for r in pts:
-        prev_for_device = device_prev.get(r["id"])
-        est_point, est_dist = estimate_signal_origin(r, prev_for_device)
+    for e in encounters:
+        r = e
+        prev_for_device = device_prev.get(r["target_id"])
+        est_point, est_dist = estimate_signal_origin({
+            "lat": r["peak_lat"],
+            "lon": r["peak_lon"],
+            "scan_type": r["scan_type"],
+            "signal": r["rssi_max"],
+        }, prev_for_device)
         if est_point is None:
             continue
         est_lat, est_lon = est_point
-        device_prev[r["id"]] = r
+        device_prev[r["target_id"]] = {"lat": r["peak_lat"], "lon": r["peak_lon"], "signal": r["rssi_max"]}
         if r.get("oui") == "B4:1E:52":
-            device_tracks.setdefault(r["id"], []).append((r["timestamp"], est_lat, est_lon))
+            device_tracks.setdefault(r["target_id"], []).append((r["t_at_rssi_max"], est_lat, est_lon))
 
         color = r["marker_color"] if r["flagged"] else ("orange" if r["scan_type"] == "wifi" else "green")
         radius = 8 if r["flagged"] else 4
-        sig = f"{r['signal']}%" if r["scan_type"] == "wifi" and r["signal"] is not None else (
-            f"{r['signal']} dBm" if r["scan_type"] == "bluetooth" and r["signal"] is not None else "N/A"
+        sig = f"{r['rssi_max']}%" if r["scan_type"] == "wifi" and r["rssi_max"] is not None else (
+            f"{r['rssi_max']} dBm" if r["scan_type"] == "bluetooth" and r["rssi_max"] is not None else "N/A"
         )
-        if r["scan_type"] == "wifi" and r["signal"] is not None:
-            weight = max(0.05, min(1.0, r["signal"] / 100))
-        elif r["scan_type"] == "bluetooth" and r["signal"] is not None:
-            weight = max(0.05, min(1.0, (r["signal"] + 100) / 60))
-        else:
-            weight = 0.1
-        heat_points.append([est_lat, est_lon, weight])
 
         hover_preview = (
-            f"{r['name'] or '(unnamed)'} | {r['device_kind']} | {r['timestamp']}"
+            f"{r['name'] or '(unnamed)'} | {r['device_kind']} | {r['t_at_rssi_max']}"
         )
         popup = (
-            "<b>SafeFlight Device Report</b><br>"
-            f"<b>Reported:</b> {r['timestamp']}<br>"
+            "<b>SafeFlight Encounter Report</b><br>"
+            f"<b>Encounter Start:</b> {r['start_t']}<br>"
+            f"<b>Encounter End:</b> {r['end_t']}<br>"
+            f"<b>Hit Count:</b> {r['count_hits']}<br>"
             f"<b>Scan Type:</b> {r['scan_type']}<br>"
             f"<b>Device Type:</b> {r['device_kind']}<br>"
             f"<b>Name:</b> {r['name'] or '(unnamed)'}<br>"
-            f"<b>ID/MAC:</b> {r['id']}<br>"
+            f"<b>ID/MAC:</b> {r['target_id']}<br>"
             f"<b>Signal:</b> {sig}<br>"
             f"<b>Strength Bucket:</b> {r['strength_bucket']}<br>"
             f"<b>Flag:</b> "
-            f"{('Fun-Stopper detected here ' + r['timestamp'][:10]) if r.get('oui') == 'B4:1E:52' else (r['flag_label'] if r['flagged'] else 'normal')}<br>"
+            f"{('Fun-Stopper detected here ' + r['t_at_rssi_max'][:10]) if r.get('oui') == 'B4:1E:52' else (r['flag_label'] if r['flagged'] else 'normal')}<br>"
             f"<b>OUI:</b> {r.get('oui') or 'unknown'}<br>"
             f"<b>Location Source:</b> {r.get('location_source') or 'unknown'}<br>"
             f"<b>Location Text:</b> {r.get('location_text') or 'unknown'}<br>"
             f"<b>Accuracy (m):</b> {r.get('location_accuracy_m') if r.get('location_accuracy_m') is not None else 'unknown'}<br>"
             f"<b>Estimated Range (m):</b> {round(est_dist, 1)}<br>"
             f"<b>Estimated Signal Origin:</b> {est_lat:.6f}, {est_lon:.6f}<br>"
+            f"<b>Confidence:</b> {r.get('confidence', 0):.2f}<br>"
             f"<b>Misc:</b> {r.get('misc') or '-'}"
         )
         mk = folium.CircleMarker(
@@ -596,7 +811,10 @@ def rebuild_map(records, center=None, current_mph=None):
         else:
             mk.add_to(fg_bt)
 
-    hotspots = compute_fun_stopper_hotspots(pts)
+    hotspots = compute_fun_stopper_hotspots([
+        {"oui": e["oui"], "lat": e["peak_lat"], "lon": e["peak_lon"], "timestamp": e["t_at_rssi_max"]}
+        for e in encounters
+    ])
     for h in hotspots:
         last = h["last_seen"].isoformat() if h["last_seen"] else "unknown"
         folium.Circle(
@@ -618,6 +836,10 @@ def rebuild_map(records, center=None, current_mph=None):
             tooltip="⚑ Fun-Stopper hotspot"
         ).add_to(fg_hotspots)
 
+    if heat_cells:
+        max_sum = max(c["sum_weight"] for c in heat_cells) or 1.0
+        for c in heat_cells:
+            heat_points.append([c["lat"], c["lon"], max(0.02, min(1.0, c["sum_weight"] / max_sum))])
     if heat_points:
         HeatMap(
             heat_points,
@@ -911,6 +1133,7 @@ class App:
     def refresh_map(self):
         self.save_settings()
         recs = self.map_records()
+        insert_encounters(build_encounters(recs))
         mph = None
         try:
             mph = float(self.speed_var.get().replace("Speed:", "").replace("MPH", "").strip())
@@ -1165,6 +1388,16 @@ class App:
                 append_local_exact(batch)
                 with history_lock:
                     history_records.extend(batch)
+                speed_mps = None
+                try:
+                    speed_mph = float(self.speed_var.get().replace("Speed:", "").replace("MPH", "").strip())
+                    speed_mps = speed_mph / 2.2369362921
+                except Exception:
+                    speed_mps = None
+                heading = None
+                if prev and prev.get("lat") is not None and loc.get("lat") is not None:
+                    heading = bearing_deg(prev["lat"], prev["lon"], loc["lat"], loc["lon"])
+                insert_raw_batch(batch, speed_mps=speed_mps, heading=heading)
                 self.maybe_toast_new_tracked_detection(batch)
 
                 if self.share_mode.get() == "safe_share":
@@ -1197,6 +1430,7 @@ class App:
 
 
 def main():
+    init_db()
     root = tk.Tk()
     style = ttk.Style()
     if "vista" in style.theme_names():
