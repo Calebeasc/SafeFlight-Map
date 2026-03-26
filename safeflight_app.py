@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import math
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -970,7 +971,14 @@ class App:
             messagebox.showinfo("Map", "No map yet. Click Update Map after scanning.")
             return
 
-        map_url = OUT_MAP.resolve().as_uri() + f"?t={int(time.time())}"
+        # pywebview may fail on file:// URLs with query params ("file not found").
+        # Create a fresh timestamped copy to guarantee both existence and refresh.
+        stamped_map = OUT_MAP.with_name(f"live_signal_map_embedded_{int(time.time())}.html")
+        try:
+            shutil.copyfile(OUT_MAP, stamped_map)
+            map_url = stamped_map.resolve().as_uri()
+        except Exception:
+            map_url = OUT_MAP.resolve().as_uri()
         # Run pywebview in a separate process to avoid Tk/webview event-loop deadlocks.
         launcher = (
             "import webview; "
