@@ -15,6 +15,7 @@ from tkinter import ttk, messagebox
 import requests
 from bleak import BleakScanner
 import folium
+from folium.plugins import HeatMap
 
 # Optional precise Windows location
 try:
@@ -400,9 +401,11 @@ def rebuild_map(records, center=None):
         attr="Esri", name="Satellite", overlay=False, control=True
     ).add_to(m)
 
+    fg_heat = folium.FeatureGroup(name="Signal Heatmap")
     fg_flag = folium.FeatureGroup(name="Flagged")
     fg_wifi = folium.FeatureGroup(name="Wi-Fi")
     fg_bt = folium.FeatureGroup(name="Bluetooth")
+    heat_points = []
 
     for r in pts:
         color = r["marker_color"] if r["flagged"] else ("orange" if r["scan_type"] == "wifi" else "green")
@@ -410,16 +413,42 @@ def rebuild_map(records, center=None):
         sig = f"{r['signal']}%" if r["scan_type"] == "wifi" and r["signal"] is not None else (
             f"{r['signal']} dBm" if r["scan_type"] == "bluetooth" and r["signal"] is not None else "N/A"
         )
-        popup = (
-            f"time={r['timestamp']}<br>"
-            f"type={r['scan_type']}<br>"
-            f"kind={r['device_kind']}<br>"
-            f"name={r['name']}<br>"
-            f"signal={sig}<br>"
-            f"bucket={r['strength_bucket']}<br>"
-            f"label={r['flag_label'] if r['flagged'] else 'normal'}"
+        if r["scan_type"] == "wifi" and r["signal"] is not None:
+            weight = max(0.05, min(1.0, r["signal"] / 100))
+        elif r["scan_type"] == "bluetooth" and r["signal"] is not None:
+            weight = max(0.05, min(1.0, (r["signal"] + 100) / 60))
+        else:
+            weight = 0.1
+        heat_points.append([r["lat"], r["lon"], weight])
+
+        hover_preview = (
+            f"{r['name'] or '(unnamed)'} | {r['device_kind']} | {r['timestamp']}"
         )
-        mk = folium.CircleMarker([r["lat"], r["lon"]], radius=radius, color=color, fill=True, fill_opacity=0.75, popup=popup)
+        popup = (
+            "<b>SafeFlight Device Report</b><br>"
+            f"<b>Reported:</b> {r['timestamp']}<br>"
+            f"<b>Scan Type:</b> {r['scan_type']}<br>"
+            f"<b>Device Type:</b> {r['device_kind']}<br>"
+            f"<b>Name:</b> {r['name'] or '(unnamed)'}<br>"
+            f"<b>ID/MAC:</b> {r['id']}<br>"
+            f"<b>Signal:</b> {sig}<br>"
+            f"<b>Strength Bucket:</b> {r['strength_bucket']}<br>"
+            f"<b>Flag:</b> {r['flag_label'] if r['flagged'] else 'normal'}<br>"
+            f"<b>OUI:</b> {r.get('oui') or 'unknown'}<br>"
+            f"<b>Location Source:</b> {r.get('location_source') or 'unknown'}<br>"
+            f"<b>Location Text:</b> {r.get('location_text') or 'unknown'}<br>"
+            f"<b>Accuracy (m):</b> {r.get('location_accuracy_m') if r.get('location_accuracy_m') is not None else 'unknown'}<br>"
+            f"<b>Misc:</b> {r.get('misc') or '-'}"
+        )
+        mk = folium.CircleMarker(
+            [r["lat"], r["lon"]],
+            radius=radius,
+            color=color,
+            fill=True,
+            fill_opacity=0.75,
+            tooltip=hover_preview,
+            popup=folium.Popup(popup, max_width=420)
+        )
         if r["flagged"]:
             mk.add_to(fg_flag)
         if r["scan_type"] == "wifi":
@@ -427,6 +456,17 @@ def rebuild_map(records, center=None):
         else:
             mk.add_to(fg_bt)
 
+    if heat_points:
+        HeatMap(
+            heat_points,
+            name="Signal Heatmap",
+            radius=14,
+            blur=16,
+            min_opacity=0.25,
+            max_zoom=18
+        ).add_to(fg_heat)
+
+    fg_heat.add_to(m)
     fg_flag.add_to(m)
     fg_wifi.add_to(m)
     fg_bt.add_to(m)

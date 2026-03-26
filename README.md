@@ -63,6 +63,9 @@ If upload fails, events are still queued locally in `safe_share_queue.jsonl`.
 - Use **Time** (`all`, `1h`, `5m`) to filter recency.
 - Use **Re-center** to center map around current location.
 - Enable **Auto map update** if you want map refresh each scan cycle.
+- The map now includes a **Signal Heatmap** layer (small/intensity-weighted by signal strength).
+- Hover a marker to preview **name + device type + reported time**.
+- Click a marker for a detailed report popup (ID/MAC, signal bucket, OUI, location source, and more).
 
 ## 7) Notes / troubleshooting
 
