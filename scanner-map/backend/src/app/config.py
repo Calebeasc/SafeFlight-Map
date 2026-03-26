@@ -11,4 +11,5 @@ class Settings(BaseSettings):
     allowlist_file: str = "backend/targets.json"
 
 settings = Settings()
-BASE_DIR = Path(__file__).resolve().parents[4]
+# .../scanner-map/backend/src/app/config.py -> repo root is parents[3]
+BASE_DIR = Path(__file__).resolve().parents[3]

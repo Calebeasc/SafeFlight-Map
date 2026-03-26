@@ -23,6 +23,8 @@ Run frontend (dev):
 cd scanner-map/frontend
 npm install
 npm run dev -- --host 127.0.0.1 --port 5173
+# If PowerShell blocks npm script execution, use:
+npm.cmd run dev -- --host 127.0.0.1 --port 5173
 ```
 
 Build frontend:
@@ -39,6 +41,8 @@ Desktop wrapper:
 cd scanner-map
 .\.venv\Scripts\Activate.ps1
 python desktop/app.py
+# or directly:
+python desktop/launcher.py
 ```
 
 Single EXE build:
