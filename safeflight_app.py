@@ -38,10 +38,13 @@ except Exception:
 SCAN_INTERVAL_SEC = 10
 BT_TIMEOUT_SEC = 6
 SHARE_GRID_DECIMALS = 2
+FEET_TO_M = 0.3048
+STOPPER_HOTSPOT_RADIUS_M = 500 * FEET_TO_M
+STOPPER_HOTSPOT_MIN_HITS = 3
 
 WATCH_OUIS = {
-    "B4:1E:52": {"label": "B-cam", "color": "red"},
-    "00:25:DF": {"label": "S-cam", "color": "blue"},
+    "B4:1E:52": {"label": "Fun-Stopper", "color": "red"},
+    "00:25:DF": {"label": "Fun-Watcher", "color": "blue"},
 }
 
 OUT_CSV = Path("local_exact_log.csv")
@@ -192,6 +195,37 @@ def estimate_signal_origin(rec, prev_for_device):
         inferred_bearing = (move_bearing + 180.0) % 360.0
 
     return destination_point(lat, lon, inferred_bearing, est_dist), est_dist
+
+
+def compute_fun_stopper_hotspots(records):
+    stoppers = [
+        r for r in records
+        if r.get("oui") == "B4:1E:52" and r.get("lat") is not None and r.get("lon") is not None
+    ]
+    clusters = []
+    for r in stoppers:
+        lat, lon = r["lat"], r["lon"]
+        ts = parse_iso(r.get("timestamp", ""))
+        added = False
+        for c in clusters:
+            d = haversine_m(lat, lon, c["lat"], c["lon"])
+            if d <= STOPPER_HOTSPOT_RADIUS_M:
+                c["count"] += 1
+                c["lat"] = (c["lat"] * (c["count"] - 1) + lat) / c["count"]
+                c["lon"] = (c["lon"] * (c["count"] - 1) + lon) / c["count"]
+                if ts and (c["last_seen"] is None or ts > c["last_seen"]):
+                    c["last_seen"] = ts
+                added = True
+                break
+        if not added:
+            clusters.append({
+                "lat": lat,
+                "lon": lon,
+                "count": 1,
+                "last_seen": ts,
+            })
+
+    return [c for c in clusters if c["count"] >= STOPPER_HOTSPOT_MIN_HITS]
 
 
 # -----------------------------
@@ -463,6 +497,7 @@ def rebuild_map(records, center=None):
 
     fg_heat = folium.FeatureGroup(name="Signal Heatmap")
     fg_paths = folium.FeatureGroup(name="Device Movement Paths")
+    fg_hotspots = folium.FeatureGroup(name="Fun-Stopper Hotspots")
     fg_flag = folium.FeatureGroup(name="Flagged")
     fg_wifi = folium.FeatureGroup(name="Wi-Fi")
     fg_bt = folium.FeatureGroup(name="Bluetooth")
@@ -504,7 +539,8 @@ def rebuild_map(records, center=None):
             f"<b>ID/MAC:</b> {r['id']}<br>"
             f"<b>Signal:</b> {sig}<br>"
             f"<b>Strength Bucket:</b> {r['strength_bucket']}<br>"
-            f"<b>Flag:</b> {r['flag_label'] if r['flagged'] else 'normal'}<br>"
+            f"<b>Flag:</b> "
+            f"{('Fun-Stopper detected here ' + r['timestamp'][:10]) if r.get('oui') == 'B4:1E:52' else (r['flag_label'] if r['flagged'] else 'normal')}<br>"
             f"<b>OUI:</b> {r.get('oui') or 'unknown'}<br>"
             f"<b>Location Source:</b> {r.get('location_source') or 'unknown'}<br>"
             f"<b>Location Text:</b> {r.get('location_text') or 'unknown'}<br>"
@@ -528,6 +564,28 @@ def rebuild_map(records, center=None):
             mk.add_to(fg_wifi)
         else:
             mk.add_to(fg_bt)
+
+    hotspots = compute_fun_stopper_hotspots(pts)
+    for h in hotspots:
+        last = h["last_seen"].isoformat() if h["last_seen"] else "unknown"
+        folium.Circle(
+            [h["lat"], h["lon"]],
+            radius=STOPPER_HOTSPOT_RADIUS_M,
+            color="red",
+            fill=True,
+            fill_opacity=0.12,
+            tooltip="Fun-Stopper commonly detected in this area",
+            popup=folium.Popup(
+                f"<b>Flagged Area</b><br>Fun-Stopper commonly detected in this area.<br>"
+                f"Detections: {h['count']}<br>Last seen: {last}",
+                max_width=420
+            )
+        ).add_to(fg_hotspots)
+        folium.Marker(
+            [h["lat"], h["lon"]],
+            icon=folium.Icon(color="red", icon="flag"),
+            tooltip="⚑ Fun-Stopper hotspot"
+        ).add_to(fg_hotspots)
 
     if heat_points:
         HeatMap(
@@ -554,6 +612,7 @@ def rebuild_map(records, center=None):
 
     fg_heat.add_to(m)
     fg_paths.add_to(m)
+    fg_hotspots.add_to(m)
     fg_flag.add_to(m)
     fg_wifi.add_to(m)
     fg_bt.add_to(m)
@@ -572,6 +631,7 @@ class App:
         self.last_location = None
         self.last_alert_ts = 0
         self.map_center = None
+        self.last_hotspot_alert_ts = 0
 
         self.status_var = tk.StringVar(value="Idle")
         self.location_var = tk.StringVar(value="Location: unknown")
@@ -605,6 +665,7 @@ class App:
 
         self.build_ui()
         self.load_settings()
+        self.load_history_from_disk()
 
     def build_ui(self):
         top = ttk.Frame(self.root, padding=8)
@@ -645,7 +706,7 @@ class App:
             ("Wi-Fi", self.v_show_wifi), ("Bluetooth", self.v_show_bt),
             ("BT speaker-like", self.v_show_speakers), ("BT other", self.v_show_bt_other),
             ("Flagged only", self.v_flagged_only), ("Show non-flagged", self.v_show_non_flagged),
-            ("Show B-cam", self.v_show_b_cam), ("Show S-cam", self.v_show_s_cam),
+            ("Show Fun-Stopper", self.v_show_b_cam), ("Show Fun-Watcher", self.v_show_s_cam),
             ("Strong", self.v_show_strong), ("Medium", self.v_show_medium),
             ("Weak", self.v_show_weak), ("Unknown", self.v_show_unknown)
         ]
@@ -741,10 +802,45 @@ class App:
         with history_lock:
             return [r for r in history_records if apply_filters(r, self.filters())]
 
+    def map_records(self):
+        # Keep Fun-Watcher marks persistent across time filters.
+        with history_lock:
+            persistent_watchers = [r for r in history_records if r.get("oui") == "00:25:DF"]
+        base = self.filtered_records()
+        seen = {(r.get("id"), r.get("timestamp")) for r in base}
+        for r in persistent_watchers:
+            key = (r.get("id"), r.get("timestamp"))
+            if key not in seen:
+                base.append(r)
+                seen.add(key)
+        return base
+
     def refresh_map(self):
         self.save_settings()
-        recs = self.filtered_records()
+        recs = self.map_records()
         rebuild_map(recs, center=self.map_center)
+
+    def load_history_from_disk(self):
+        if not OUT_JSONL.exists():
+            return
+        loaded = []
+        try:
+            with OUT_JSONL.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        r = json.loads(line)
+                    except Exception:
+                        continue
+                    if r.get("lat") is not None and r.get("lon") is not None:
+                        loaded.append(r)
+        except Exception:
+            return
+        if loaded:
+            with history_lock:
+                history_records.extend(loaded)
 
     def recenter_map(self):
         if self.last_location and self.last_location.get("lat") is not None:
@@ -854,6 +950,24 @@ class App:
             self.last_alert_ts = now
             label = target["flag_label"] or "flagged"
             self.status_var.set(f"ALERT: Heading toward nearby {label} (~{int(dist)}m)")
+            print("\a")
+
+        with history_lock:
+            hotspots = compute_fun_stopper_hotspots(history_records)
+        if not hotspots:
+            return
+        nearest_hotspot = min(
+            hotspots,
+            key=lambda h: haversine_m(cur_loc["lat"], cur_loc["lon"], h["lat"], h["lon"])
+        )
+        hd = haversine_m(cur_loc["lat"], cur_loc["lon"], nearest_hotspot["lat"], nearest_hotspot["lon"])
+        if hd > 900:
+            return
+        hb = bearing_deg(cur_loc["lat"], cur_loc["lon"], nearest_hotspot["lat"], nearest_hotspot["lon"])
+        hdiff = angle_diff_deg(move_b, hb)
+        if hdiff <= 40 and (now - self.last_hotspot_alert_ts) > 75:
+            self.last_hotspot_alert_ts = now
+            self.status_var.set("ALERT: Approaching flagged area - Fun-Stopper commonly detected nearby")
             print("\a")
 
     def loop(self):
