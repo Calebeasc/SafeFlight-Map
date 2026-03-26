@@ -1,2 +1,2 @@
-def split_encounters(rows, wifi_gap=2.0, ble_gap=1.0):
-    return []
+def gap_timeout(source: str) -> float:
+    return 2.0 if source == "wifi" else 1.0

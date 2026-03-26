@@ -1,8 +1,16 @@
 from fastapi import APIRouter
-router = APIRouter(prefix="/control")
-@router.post("/start")
+
+router = APIRouter(prefix='/control')
+SCANNER_RUNNING = False
+
+@router.post('/start')
 def start():
-    return {"status": "started"}
-@router.post("/stop")
+    global SCANNER_RUNNING
+    SCANNER_RUNNING = True
+    return {"running": SCANNER_RUNNING}
+
+@router.post('/stop')
 def stop():
-    return {"status": "stopped"}
+    global SCANNER_RUNNING
+    SCANNER_RUNNING = False
+    return {"running": SCANNER_RUNNING}

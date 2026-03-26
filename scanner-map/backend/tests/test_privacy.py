@@ -1,4 +1,5 @@
-from app.core.privacy import hash_target
+from app.core.privacy import Allowlist
 
-def test_hash_stable():
-    assert hash_target("s", "A") == hash_target("s", "a")
+def test_normalize_stable():
+    a = Allowlist()
+    assert a.normalize('AA-BB') == 'aa:bb'
