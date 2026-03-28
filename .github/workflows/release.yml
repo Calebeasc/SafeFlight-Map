@@ -1,0 +1,138 @@
+name: Build & Release Windows Installer
+
+# Triggers:
+#   - Push a tag like v1.1, v1.2, v2.0 → builds and publishes to GitHub Releases
+#   - workflow_dispatch → manual trigger from the Actions tab (useful for testing)
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag (e.g. v1.1)'
+        required: true
+        default: 'v1.1'
+
+jobs:
+  build-windows:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Node / React frontend ────────────────────────────────────────────
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: scanner-map/frontend/package-lock.json
+
+      - name: Build React frontend
+        working-directory: scanner-map/frontend
+        run: |
+          npm ci
+          npm run build
+
+      # ── 3. Python + dependencies ────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        working-directory: scanner-map/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      # ── 4. Generate assets ──────────────────────────────────────────────────
+      - name: Generate app icon
+        working-directory: scanner-map
+        run: python installer/generate_icon.py
+
+      - name: Generate installer wizard images
+        working-directory: scanner-map
+        run: python installer/generate_assets.py
+
+      # ── 5. PyInstaller — build EXE bundle ───────────────────────────────────
+      - name: Build with PyInstaller
+        working-directory: scanner-map/user_app
+        run: python -m PyInstaller user.spec --clean --noconfirm
+
+      - name: Verify EXE was produced
+        run: |
+          if (-not (Test-Path "scanner-map\user_app\dist\InvincibleInc\InvincibleInc.exe")) {
+            Write-Error "InvincibleInc.exe not found — PyInstaller build failed"
+            exit 1
+          }
+          $size = [math]::Round((Get-Item "scanner-map\user_app\dist\InvincibleInc\InvincibleInc.exe").Length / 1MB, 1)
+          Write-Host "EXE size: $size MB"
+        shell: pwsh
+
+      # ── 6. Inno Setup — build installer ─────────────────────────────────────
+      - name: Install Inno Setup 6
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build installer with Inno Setup
+        working-directory: scanner-map
+        run: |
+          New-Item -ItemType Directory -Force -Path dist_installer | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" installer\installer.iss
+          if (-not (Test-Path "dist_installer\InvincibleInc_Setup_v1.1.exe")) {
+            Write-Error "Installer not found — Inno Setup build failed"
+            exit 1
+          }
+          $size = [math]::Round((Get-Item "dist_installer\InvincibleInc_Setup_v1.1.exe").Length / 1MB, 1)
+          Write-Host "Installer size: $size MB"
+        shell: pwsh
+
+      # ── 7. Get version string ───────────────────────────────────────────────
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $v = "${{ github.event.inputs.tag }}"
+          } else {
+            $v = "${{ github.ref_name }}"
+          }
+          echo "tag=$v" >> $env:GITHUB_OUTPUT
+          echo "Version: $v"
+
+      # ── 8. Upload to GitHub Releases ────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: "Invincible.Inc Scanner ${{ steps.ver.outputs.tag }}"
+          body: |
+            ## Invincible.Inc Scanner ${{ steps.ver.outputs.tag }}
+
+            ### Install (Windows 10/11)
+            1. Download **InvincibleInc_Setup_v1.1.exe** below
+            2. Run the installer — accept the license, choose shortcuts, click **Install**
+            3. The app opens in a native window with a radar icon in your system tray
+
+            ### Requirements
+            - Windows 10 version 1809 or later (Windows 11 recommended)
+            - [Npcap](https://npcap.com/#download) for WiFi scanning — the app will prompt you on first launch if it's missing
+
+            ### What's included
+            - Full WiFi + BLE scanner engine
+            - GPS route recorder
+            - Live encounter map (Leaflet)
+            - Fun-Stopper detection with tray alerts
+            - System tray with auto-update notifications
+            - Offline mode when scanner hardware is unavailable
+          files: scanner-map/dist_installer/InvincibleInc_Setup_v1.1.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
