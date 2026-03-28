@@ -1381,6 +1381,36 @@ in_cone = (
 
       <details class="changelog-entry">
         <summary class="changelog-header">
+          <span class="changelog-version">v0.8</span>
+          <span class="changelog-title">Dev Console Map &amp; Lab Reference Tabs</span>
+          <span class="changelog-date">March 2026</span>
+          <span style="font-size:10px;font-weight:700;background:rgba(255,69,58,0.12);color:#FF453A;padding:1px 8px;border-radius:20px;border:1px solid rgba(255,69,58,0.2);flex-shrink:0;">DEV ONLY</span>
+          <span class="changelog-chevron">▶</span>
+        </summary>
+        <div class="changelog-body">
+          <ul>
+            <li>
+              <div>
+                <strong>Map tab in Dev Console</strong> — full Leaflet map inside the dev console with all layers: heat, device markers, route, hotspots, stopper trails, and Flock camera overlay. Operator GPS pulled from <code>/gps/status</code> every 2 seconds.
+                <div class="sub">Dev Tools overlay: floating panel with active stoppers list, probe requests, scanner status, and live stats.</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Lab tab — Reference Library</strong> — organized tool reference with detection risk (CATCH) and damage potential ratings, legal citations, won't-build entries explaining refusals, and Flock Security Research summaries. Each entry shows an ℹ️ Info toggle that reveals the full description without cluttering the sidebar.
+              </div>
+            </li>
+          </ul>
+          <div class="changelog-platforms">
+            <span class="pl-label">Released on:</span>
+            <span class="platform-tag pt-windows">🖥 Windows 10/11 (EXE)</span>
+            <span class="platform-tag pt-web">🌐 Web Browser</span>
+          </div>
+        </div>
+      </details>
+
+      <details class="changelog-entry">
+        <summary class="changelog-header">
           <span class="changelog-version">v0.7</span>
           <span class="changelog-title">Flock Camera Map Layer · ALPR Surveillance Overlay</span>
           <span class="changelog-date">March 2026</span>
@@ -1398,6 +1428,74 @@ in_cone = (
               <div>
                 <strong>Live stopper tracking</strong> — patrol vehicles with identifiable fleet hardware (Cradlepoint, Sierra Wireless, Axon Fleet) now show movement trails on the map in real-time. Red trail = seen in last 5 minutes. Orange = last 15 minutes. Trail reconstructed from GPS positions recorded when the scanner detected the vehicle's WiFi/BLE.
                 <div class="sub">Tap any stopper dot to see label, signal strength, hit count, and last-seen time.</div>
+              </div>
+            </li>
+          </ul>
+          <div class="changelog-platforms">
+            <span class="pl-label">Released on:</span>
+            <span class="platform-tag pt-windows">🖥 Windows 10/11 (EXE)</span>
+            <span class="platform-tag pt-web">🌐 Web Browser</span>
+          </div>
+        </div>
+      </details>
+
+      <details class="changelog-entry">
+        <summary class="changelog-header">
+          <span class="changelog-version">v0.6</span>
+          <span class="changelog-title">Live Stopper Tracking · Fleet Trail Polylines</span>
+          <span class="changelog-date">March 2026</span>
+          <span style="font-size:10px;font-weight:700;background:rgba(255,69,58,0.12);color:#FF453A;padding:1px 8px;border-radius:20px;border:1px solid rgba(255,69,58,0.2);flex-shrink:0;">DEV ONLY</span>
+          <span class="changelog-chevron">▶</span>
+        </summary>
+        <div class="changelog-body">
+          <ul>
+            <li>
+              <div>
+                <strong>GET /stoppers/active</strong> — new backend endpoint derives fleet/patrol positions from raw observations using fleet-hardware pattern matching (Cradlepoint, Sierra Wireless, Axon, Motorola APX, Fun-Stopper aggregator).
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Stopper trail polylines</strong> — per-device movement history rendered on the map with activity color-coding: red = active &lt;5 min, orange = recent &lt;15 min, gray = older. Pulsing dot with tooltip at current position.
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Live Stoppers panel in Lab tab</strong> — real-time table of detected fleet devices with mobile/fixed classification, RSSI, hit count, and last-seen countdown.
+              </div>
+            </li>
+          </ul>
+          <div class="changelog-platforms">
+            <span class="pl-label">Released on:</span>
+            <span class="platform-tag pt-windows">🖥 Windows 10/11 (EXE)</span>
+            <span class="platform-tag pt-web">🌐 Web Browser</span>
+          </div>
+        </div>
+      </details>
+
+      <details class="changelog-entry">
+        <summary class="changelog-header">
+          <span class="changelog-version">v0.5</span>
+          <span class="changelog-title">Dev Console Docs Tab · Usage Instructions</span>
+          <span class="changelog-date">March 2026</span>
+          <span style="font-size:10px;font-weight:700;background:rgba(255,69,58,0.12);color:#FF453A;padding:1px 8px;border-radius:20px;border:1px solid rgba(255,69,58,0.2);flex-shrink:0;">DEV ONLY</span>
+          <span class="changelog-chevron">▶</span>
+        </summary>
+        <div class="changelog-body">
+          <ul>
+            <li>
+              <div>
+                <strong>Docs tab in Dev Console</strong> — architecture overview, setup guide, hard rules reference, and git workflow guidelines all accessible without leaving the app.
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Dev changelog separated</strong> — dev entries no longer appear in the public update blog; they live inside the Dev Console Docs tab and the dev portal only.
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>UsageInstructions cards</strong> — collapsible "📖 How to Use" cards added to every live Lab tool (Probe Requests, LAN Devices, Cell Signal, Aggressive Scanner, Port Scanner, Banner Grab).
               </div>
             </li>
           </ul>

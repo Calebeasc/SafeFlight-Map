@@ -5,6 +5,11 @@ Full scanner (WiFi + BLE + GPS), local server, native window.
 Identical scanner engine to DevInvincible.Inc; differs only in branding.
 Requires Administrator (Windows will prompt automatically via UAC manifest).
 
+Offline mode: if the backend server fails to start (e.g. missing Npcap,
+driver issue, port conflict) the app opens an embedded offline page instead
+of crashing. The tray stays alive and retries the server every 30 seconds;
+when it comes back up a tray notification fires and the window reloads.
+
 Build:
   pyinstaller user_app/user.spec --clean --noconfirm
 """
@@ -16,6 +21,7 @@ import webbrowser
 import logging
 import urllib.request
 import json
+import tempfile
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -53,6 +59,8 @@ APP_VERSION  = '1.0.0'                          # bump this with each release
 GITHUB_REPO  = 'YourUsername/scanner-map'       # ← set to your actual GitHub repo
 
 _update_available: str | None = None
+_server_online: bool = False          # set True once /health responds
+_window_ref     = None                # pywebview window handle (if open)
 
 # ── Update checker ────────────────────────────────────────────────────────────
 
@@ -149,6 +157,66 @@ def set_autostart(enable: bool):
     except Exception as e:
         log.warning('autostart set: %s', e)
 
+# ── Offline page ──────────────────────────────────────────────────────────────
+
+_OFFLINE_HTML_TEMPLATE = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Invincible.Inc — Offline</title>
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box}}
+  body{{background:#080c14;color:#e8edf5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}}
+  .card{{max-width:480px;text-align:center;}}
+  .icon{{font-size:56px;margin-bottom:24px;}}
+  h1{{font-size:22px;font-weight:800;margin-bottom:10px;}}
+  p{{font-size:14px;color:rgba(180,195,220,0.7);line-height:1.7;margin-bottom:8px;}}
+  .badge{{display:inline-block;margin-top:20px;padding:8px 20px;border-radius:100px;
+         background:rgba(0,200,255,0.1);border:1px solid rgba(0,200,255,0.25);
+         color:#00c8ff;font-size:12px;font-weight:700;}}
+  .reason{{margin-top:22px;padding:14px 18px;border-radius:12px;
+          background:rgba(255,69,58,0.06);border:1px solid rgba(255,69,58,0.2);
+          font-size:12px;color:rgba(180,195,220,0.55);text-align:left;line-height:1.8;}}
+  .retry{{margin-top:24px;padding:10px 24px;border-radius:100px;background:rgba(0,200,255,0.12);
+         border:1px solid rgba(0,200,255,0.3);color:#00c8ff;font-size:13px;font-weight:700;
+         cursor:pointer;}}
+  .retry:hover{{background:rgba(0,200,255,0.2);}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">📡</div>
+  <h1>Scanner offline</h1>
+  <p>The Invincible.Inc scanning engine couldn't start. This usually means a required driver is missing or the port is busy.</p>
+  <div class="reason">
+    <strong style="color:rgba(220,230,245,0.8);">Common causes</strong><br>
+    &bull; Npcap not installed &mdash; download from npcap.com<br>
+    &bull; Another instance of the app is already running<br>
+    &bull; Port 8742 is in use by another process<br>
+    &bull; WiFi adapter not present or disabled<br>
+    &bull; Check <code style="color:#00c8ff;">~/SafeFlightMap/launcher.log</code> for details
+  </div>
+  <p style="margin-top:18px;">The app will keep retrying. You'll get a notification when the scanner comes back online.</p>
+  <button class="retry" onclick="window.location.reload()">Retry now</button>
+  <div class="badge">v{ver} &middot; Offline Mode</div>
+</div>
+</body>
+</html>
+"""
+
+
+def _offline_page_url() -> str:
+    """Write the offline HTML to a temp file and return its file:// URL."""
+    html = _OFFLINE_HTML_TEMPLATE.format(ver=APP_VERSION)
+    path = os.path.join(tempfile.gettempdir(), 'invincible_offline.html')
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(html)
+    return f'file:///{path.replace(os.sep, "/")}'
+
+
 # ── Backend server ────────────────────────────────────────────────────────────
 
 def _start_server():
@@ -172,6 +240,28 @@ def _wait_for_server(timeout: float = 20.0) -> bool:
             time.sleep(0.25)
     log.error('server not ready after %.0fs', timeout)
     return False
+
+
+def _server_recovery_loop(notify_fn):
+    """After a failed startup, keep polling and notify when server comes back."""
+    global _server_online, _window_ref
+    log.info('server recovery loop started')
+    while True:
+        time.sleep(30)
+        try:
+            urllib.request.urlopen(f'{URL}/health', timeout=3)
+            if not _server_online:
+                _server_online = True
+                log.info('server recovered')
+                notify_fn('✅ Scanner back online', 'Invincible.Inc is ready — opening map.')
+                if _window_ref is not None:
+                    try:
+                        _window_ref.load_url(URL)
+                    except Exception as e:
+                        log.debug('window reload failed: %s', e)
+                        webbrowser.open(URL)
+        except Exception:
+            _server_online = False
 
 # ── Tray icon ─────────────────────────────────────────────────────────────────
 
@@ -211,34 +301,49 @@ def _alert_poll_loop(notify_fn):
 
 # ── System tray ───────────────────────────────────────────────────────────────
 
-def _run_tray(stop_event: threading.Event):
+def _run_tray(stop_event: threading.Event, notify_holder: list | None = None):
     try:
         import pystray
     except ImportError:
         log.warning('pystray not available')
+        if notify_holder is not None:
+            notify_holder[0] = lambda t, m: None
         stop_event.wait()
         return
 
     icon_img = _make_icon()
 
-    def open_map(icon, item):     webbrowser.open(URL)
+    def open_map(icon, item):
+        if _server_online:
+            webbrowser.open(URL)
+        else:
+            webbrowser.open(_offline_page_url())
+
     def open_releases(icon, item): webbrowser.open(f'https://github.com/{GITHUB_REPO}/releases/latest')
+
     def quit_app(icon, item):
         log.info('quit from tray')
         stop_event.set()
         icon.stop()
+
     def toggle_autostart(icon, item):
         set_autostart(not is_autostart_enabled())
         icon.update_menu()
+
     def _autostart_label(item):
         return '✓ Launch on Windows boot' if is_autostart_enabled() else '  Launch on Windows boot'
+
     def _update_label(item):
         return (f'⬆ Update available — v{_update_available}'
                 if _update_available else f'  Up to date (v{APP_VERSION})')
 
+    def _status_label(item):
+        return '🟢 Scanner online' if _server_online else '🔴 Scanner offline — retrying…'
+
     menu = pystray.Menu(
         pystray.MenuItem('Open Map', open_map, default=True),
         pystray.Menu.SEPARATOR,
+        pystray.MenuItem(_status_label, None, enabled=False),
         pystray.MenuItem(_update_label, open_releases),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(_autostart_label, toggle_autostart),
@@ -254,6 +359,10 @@ def _run_tray(stop_event: threading.Event):
         except Exception as e:
             log.debug('tray notify failed: %s', e)
 
+    # Expose notify so _server_recovery_loop can use it
+    if notify_holder is not None:
+        notify_holder[0] = notify
+
     threading.Thread(target=_alert_poll_loop, args=(notify,), daemon=True).start()
     threading.Thread(target=_check_for_update, args=(notify,), daemon=True).start()
 
@@ -262,36 +371,51 @@ def _run_tray(stop_event: threading.Event):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    global _server_online, _window_ref
+
     mutex = _ensure_single_instance()
 
     threading.Thread(target=_start_server, daemon=True).start()
+    server_ready = _wait_for_server()
+    _server_online = server_ready
 
-    if not _wait_for_server():
-        try:
-            import ctypes
-            ctypes.windll.user32.MessageBoxW(
-                0,
-                'Server failed to start.\nCheck ~/SafeFlightMap/launcher.log',
-                'Invincible.Inc — Error', 0x10,
-            )
-        except Exception:
-            pass
-        sys.exit(1)
+    if not server_ready:
+        log.warning('server did not start in time — entering offline mode')
 
-    stop_event  = threading.Event()
-    threading.Thread(target=_run_tray, args=(stop_event,), daemon=True).start()
+    stop_event = threading.Event()
+
+    # Tray must start before the window so notify_fn is available
+    tray_notify_holder: list = [lambda t, m: None]
+
+    def _tray_thread():
+        _run_tray(stop_event, tray_notify_holder)
+
+    threading.Thread(target=_tray_thread, daemon=True).start()
+
+    if not server_ready:
+        # Kick off recovery loop — will reload the window when server comes up
+        threading.Thread(
+            target=_server_recovery_loop,
+            args=(lambda t, m: tray_notify_holder[0](t, m),),
+            daemon=True,
+        ).start()
+
+    target_url = URL if server_ready else _offline_page_url()
 
     try:
         import webview
-        log.info('opening pywebview')
-        webview.create_window('Invincible.Inc', URL,
-                              width=1280, height=800, min_size=(480, 600))
+        log.info('opening pywebview (%s)', 'online' if server_ready else 'offline page')
+        window = webview.create_window(
+            'Invincible.Inc', target_url,
+            width=1280, height=800, min_size=(480, 600),
+        )
+        _window_ref = window
         webview.start()
         log.info('window closed — continuing in tray')
         stop_event.wait()
     except Exception as e:
         log.warning('pywebview failed (%s) — browser fallback', e)
-        webbrowser.open(URL)
+        webbrowser.open(target_url)
         stop_event.wait()
 
     log.info('exit')

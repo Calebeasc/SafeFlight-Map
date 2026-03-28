@@ -52,7 +52,8 @@ export default function UpdateToast() {
       transform: visible ? 'translateY(0)' : 'translateY(-110%)',
       transition: 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1)',
       pointerEvents: visible ? 'auto' : 'none',
-      padding: '10px 12px 0',
+      paddingTop: 'max(10px, env(safe-area-inset-top))',
+      paddingLeft: 12, paddingRight: 12,
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,

