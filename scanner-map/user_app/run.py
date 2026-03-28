@@ -55,12 +55,46 @@ PORT         = 8742
 URL          = f'http://127.0.0.1:{PORT}'
 APP_NAME     = 'InvincibleInc'
 EXE_PATH     = sys.executable
-APP_VERSION  = '1.0.0'                          # bump this with each release
-GITHUB_REPO  = 'YourUsername/scanner-map'       # ← set to your actual GitHub repo
+APP_VERSION  = '1.1.0'
+GITHUB_REPO  = 'Calebeasc/SafeFlight-Map'
 
 _update_available: str | None = None
 _server_online: bool = False          # set True once /health responds
 _window_ref     = None                # pywebview window handle (if open)
+
+# ── Npcap / dependency check ──────────────────────────────────────────────────
+
+def _check_npcap() -> bool:
+    """Return True if Npcap (or WinPcap) is installed."""
+    if sys.platform != 'win32':
+        return True
+    try:
+        import winreg
+        winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Npcap')
+        return True
+    except FileNotFoundError:
+        pass
+    # Fallback: check for the DLL (WinPcap / Npcap both install this)
+    return os.path.exists(r'C:\Windows\System32\wpcap.dll')
+
+
+def _prompt_npcap():
+    """Show a dialog if Npcap is missing; offer to open the download page."""
+    try:
+        import ctypes
+        result = ctypes.windll.user32.MessageBoxW(
+            0,
+            'WiFi scanning requires Npcap, which is not installed on this machine.\n\n'
+            'Without Npcap, WiFi scanning is disabled. BLE and GPS still work.\n\n'
+            'Click OK to open the Npcap download page (npcap.com), '
+            'then re-launch the app after installation.',
+            'Invincible.Inc — Npcap Required for WiFi',
+            0x30 | 0x1,   # MB_ICONEXCLAMATION | MB_OKCANCEL
+        )
+        if result == 1:   # IDOK
+            webbrowser.open('https://npcap.com/#download')
+    except Exception as e:
+        log.warning('npcap prompt failed: %s', e)
 
 # ── Update checker ────────────────────────────────────────────────────────────
 
@@ -374,6 +408,10 @@ def main():
     global _server_online, _window_ref
 
     mutex = _ensure_single_instance()
+
+    if not _check_npcap():
+        log.warning('Npcap not found — WiFi scanning will be unavailable')
+        _prompt_npcap()
 
     threading.Thread(target=_start_server, daemon=True).start()
     server_ready = _wait_for_server()

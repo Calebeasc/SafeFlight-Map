@@ -9,6 +9,9 @@ __pycache__/
 dist/
 build/
 *.spec
+# Keep PyInstaller spec files
+!scanner-map/user_app/user.spec
+!scanner-map/backend/invincible.spec
 
 # Node
 node_modules/

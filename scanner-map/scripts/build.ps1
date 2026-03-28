@@ -1,90 +1,155 @@
-# build.ps1 – SafeFlight Map build script
-# Run from the repo root: .\scripts\build.ps1
-# Produces: dist\scanner-map.exe
+# ============================================================================
+#  Invincible.Inc Scanner — Full Build Pipeline
+#  Run from the repo root:  .\scanner-map\scripts\build.ps1
+#
+#  Produces:
+#    scanner-map\user_app\dist\InvincibleInc\InvincibleInc.exe  (raw bundle)
+#    scanner-map\dist_installer\InvincibleInc_Setup_v1.1.exe    (installer)
+#
+#  Requirements:
+#    - Node.js + npm
+#    - Python 3.11+ with venv at scanner-map\.venv
+#    - PyInstaller  (pip install pyinstaller)
+#    - Pillow       (pip install pillow)
+#    - Inno Setup 6 (iscc.exe on PATH or at default install location)
+# ============================================================================
 
 param(
-    [switch]$SkipFrontend,
-    [switch]$SkipVenv
+    [switch]$SkipFrontend,    # skip `npm run build`
+    [switch]$SkipVenv,        # skip pip install
+    [switch]$SkipInstaller,   # skip Inno Setup (just build the EXE bundle)
+    [switch]$SkipIcon         # skip icon generation (use existing icon.ico)
 )
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-$Root = Split-Path $PSScriptRoot -Parent
+$ErrorActionPreference = 'Stop'
 
-Write-Host "`n=== SafeFlight Map Builder ===" -ForegroundColor Cyan
+$Root        = Split-Path $PSScriptRoot -Parent           # scanner-map/
+$FrontendDir = Join-Path $Root 'frontend'
+$BackendDir  = Join-Path $Root 'backend'
+$UserAppDir  = Join-Path $Root 'user_app'
+$InstallerDir= Join-Path $Root 'installer'
+$VenvDir     = Join-Path $Root '.venv'
+$Python      = if (Test-Path "$VenvDir\Scripts\python.exe") { "$VenvDir\Scripts\python.exe" } else { 'python' }
+$Pip         = if (Test-Path "$VenvDir\Scripts\pip.exe")    { "$VenvDir\Scripts\pip.exe"    } else { 'pip'    }
 
-# ── 1. Build React frontend ───────────────────────────────────────────────────
+function Step($n, $total, $msg) {
+    Write-Host "`n[$n/$total] $msg" -ForegroundColor Yellow
+}
+function OK($msg) { Write-Host "      $msg" -ForegroundColor Green }
+function Fail($msg) { Write-Error $msg }
+
+$TotalSteps = 5
+if ($SkipInstaller) { $TotalSteps = 4 }
+
+Write-Host "`n══════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "  Invincible.Inc Builder  v1.1" -ForegroundColor Cyan
+Write-Host "══════════════════════════════════════════`n" -ForegroundColor Cyan
+
+# ── 1. React frontend ─────────────────────────────────────────────────────────
+Step 1 $TotalSteps 'Building React frontend...'
 if (-not $SkipFrontend) {
-    Write-Host "`n[1/4] Building React frontend..." -ForegroundColor Yellow
-    Push-Location "$Root\frontend"
-    npm install --prefer-offline
+    Push-Location $FrontendDir
+    npm install --prefer-offline --silent
     npm run build
-    if (-not (Test-Path "dist\index.html")) {
-        Write-Error "Frontend build failed – dist\index.html not found."
-    }
+    if (-not (Test-Path 'dist\index.html')) { Fail 'Frontend build failed — dist\index.html not found.' }
     Pop-Location
-    Write-Host "      Frontend built OK." -ForegroundColor Green
+    OK 'Frontend built.'
 } else {
-    Write-Host "[1/4] Skipping frontend build." -ForegroundColor DarkGray
+    if (-not (Test-Path "$FrontendDir\dist\index.html")) {
+        Fail 'No frontend dist found and -SkipFrontend was set. Run without -SkipFrontend first.'
+    }
+    Write-Host '      Skipped (using existing dist).' -ForegroundColor DarkGray
 }
 
-# ── 2. Create / activate Python venv ────────────────────────────────────────
-Write-Host "`n[2/4] Setting up Python environment..." -ForegroundColor Yellow
-$VenvDir = "$Root\.venv"
+# ── 2. Python environment ────────────────────────────────────────────────────
+Step 2 $TotalSteps 'Setting up Python environment...'
 if (-not $SkipVenv) {
     if (-not (Test-Path $VenvDir)) {
         python -m venv $VenvDir
     }
-    & "$VenvDir\Scripts\pip" install --upgrade pip --quiet
-    & "$VenvDir\Scripts\pip" install -r "$Root\backend\requirements.txt" --quiet
-    Write-Host "      Python env ready." -ForegroundColor Green
+    & $Pip install --upgrade pip --quiet
+    & $Pip install -r "$BackendDir\requirements.txt" --quiet
+    & $Pip install pyinstaller pillow --quiet
+    OK 'Python environment ready.'
+} else {
+    Write-Host '      Skipped.' -ForegroundColor DarkGray
 }
 
-$Python = "$VenvDir\Scripts\python.exe"
-if (-not (Test-Path $Python)) { $Python = "python" }
-
-# ── 3. Run PyInstaller ───────────────────────────────────────────────────────
-Write-Host "`n[3/4] Running PyInstaller..." -ForegroundColor Yellow
-
-$FrontendDist = "$Root\frontend\dist"
-$BackendSrc   = "$Root\backend\src"
-$Launcher     = "$Root\desktop\launcher.py"
-$OutDir       = "$Root\dist"
-
-# Build the --add-data argument (src;dest inside the bundle)
-$AddData      = "$FrontendDist;frontend/dist"
-$AddPaths     = $BackendSrc
-
-& $Python -m PyInstaller `
-    --onefile `
-    --noconsole `
-    --name "scanner-map" `
-    --distpath $OutDir `
-    --workpath "$Root\build\pyinstaller" `
-    --specpath "$Root\build" `
-    --add-data "$AddData" `
-    --paths $AddPaths `
-    --hidden-import "app.main" `
-    --hidden-import "app.api.control" `
-    --hidden-import "app.api.targets" `
-    --hidden-import "app.api.heatmap" `
-    --hidden-import "app.api.encounters" `
-    --hidden-import "app.api.exports" `
-    --hidden-import "app.db.database" `
-    --hidden-import "app.ingest.scanner" `
-    --hidden-import "app.processing.aggregator" `
-    --hidden-import "app.core.config" `
-    --hidden-import "app.core.allowlist" `
-    $Launcher
-
-if (-not (Test-Path "$OutDir\scanner-map.exe")) {
-    Write-Error "PyInstaller did not produce scanner-map.exe"
+# ── 3. Generate icon ──────────────────────────────────────────────────────────
+Step 3 $TotalSteps 'Generating app icon...'
+if (-not $SkipIcon) {
+    & $Python "$InstallerDir\generate_icon.py"
+    if (-not (Test-Path "$InstallerDir\icon.ico")) { Fail 'Icon generation failed.' }
+    OK 'icon.ico generated.'
+} else {
+    if (-not (Test-Path "$InstallerDir\icon.ico")) {
+        Write-Host '      Warning: icon.ico not found — EXE will use default icon.' -ForegroundColor DarkYellow
+    } else {
+        Write-Host '      Skipped (using existing icon.ico).' -ForegroundColor DarkGray
+    }
 }
 
-# ── 4. Copy targets template ─────────────────────────────────────────────────
-Write-Host "`n[4/4] Copying assets..." -ForegroundColor Yellow
-Copy-Item "$Root\targets.example.json" "$OutDir\targets.example.json" -Force
+# Also generate installer wizard images if they don't exist
+if (-not (Test-Path "$InstallerDir\wizard_banner.bmp")) {
+    Write-Host '      Generating installer wizard images...' -ForegroundColor DarkGray
+    & $Python "$InstallerDir\generate_assets.py"
+}
 
-Write-Host "`n=== BUILD COMPLETE ===" -ForegroundColor Cyan
-Write-Host "Executable: $OutDir\scanner-map.exe" -ForegroundColor Green
-Write-Host "Copy targets.example.json to %USERPROFILE%\SafeFlightMap\targets.json and edit it."
+# ── 4. PyInstaller ────────────────────────────────────────────────────────────
+Step 4 $TotalSteps 'Running PyInstaller...'
+Push-Location $Root
+& $Python -m PyInstaller "$UserAppDir\user.spec" --clean --noconfirm
+Pop-Location
+
+$ExePath = "$UserAppDir\dist\InvincibleInc\InvincibleInc.exe"
+if (-not (Test-Path $ExePath)) { Fail "PyInstaller did not produce InvincibleInc.exe" }
+$ExeSize = [math]::Round((Get-Item $ExePath).Length / 1MB, 1)
+OK "InvincibleInc.exe built ($ExeSize MB)."
+
+# ── 5. Inno Setup installer ──────────────────────────────────────────────────
+if (-not $SkipInstaller) {
+    Step 5 $TotalSteps 'Building installer with Inno Setup...'
+
+    # Locate iscc.exe
+    $IsccPaths = @(
+        'iscc.exe',
+        'C:\Program Files (x86)\Inno Setup 6\iscc.exe',
+        'C:\Program Files\Inno Setup 6\iscc.exe',
+    )
+    $Iscc = $null
+    foreach ($p in $IsccPaths) {
+        if (Get-Command $p -ErrorAction SilentlyContinue) { $Iscc = $p; break }
+        if (Test-Path $p) { $Iscc = $p; break }
+    }
+
+    if (-not $Iscc) {
+        Write-Host '' -ForegroundColor Red
+        Write-Host '  ✗ Inno Setup not found. Download from jrsoftware.org/isinfo.php' -ForegroundColor Red
+        Write-Host '    The EXE bundle is ready at:' -ForegroundColor DarkYellow
+        Write-Host "    $ExePath" -ForegroundColor White
+        Write-Host '    Skipping installer creation.' -ForegroundColor DarkYellow
+    } else {
+        $OutDir = Join-Path $Root 'dist_installer'
+        New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+        & $Iscc "$InstallerDir\installer.iss"
+        $SetupExe = "$OutDir\InvincibleInc_Setup_v1.1.exe"
+        if (-not (Test-Path $SetupExe)) { Fail 'Inno Setup did not produce installer.' }
+        $SetupSize = [math]::Round((Get-Item $SetupExe).Length / 1MB, 1)
+        OK "Installer built ($SetupSize MB)."
+    }
+}
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+Write-Host "`n══════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host '  BUILD COMPLETE' -ForegroundColor Green
+Write-Host '══════════════════════════════════════════' -ForegroundColor Cyan
+Write-Host ''
+Write-Host "  EXE bundle : $ExePath"
+if (-not $SkipInstaller -and (Test-Path "$Root\dist_installer\InvincibleInc_Setup_v1.1.exe")) {
+    Write-Host "  Installer  : $Root\dist_installer\InvincibleInc_Setup_v1.1.exe"
+}
+Write-Host ''
+Write-Host '  To distribute: share the Setup .exe — it includes everything.' -ForegroundColor DarkGray
+Write-Host '  Users will need Npcap for WiFi scanning (app prompts on first launch).' -ForegroundColor DarkGray
+Write-Host ''
