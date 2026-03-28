@@ -1,0 +1,7 @@
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+pywebview==5.0.5
+pyinstaller==6.5.0
+bleak==0.21.1
+pystray==0.19.5
+Pillow==10.3.0

@@ -1,0 +1,76 @@
+INVINCIBLE.INC SCANNER — END-USER LICENSE AGREEMENT
+====================================================
+
+PLEASE READ THIS AGREEMENT CAREFULLY BEFORE INSTALLING OR USING THIS SOFTWARE.
+
+By clicking "I accept the agreement" and installing Invincible.Inc Scanner, you
+agree to be bound by the terms of this End-User License Agreement ("Agreement").
+If you do not agree, do not install or use the software.
+
+1. LICENSE GRANT
+   Invincible.Inc grants you a personal, non-exclusive, non-transferable license
+   to install and use this software solely for your personal, non-commercial use
+   on Windows devices that you own or control.
+
+2. RESTRICTIONS
+   You may not:
+   a) Copy, modify, distribute, sell, or sublicense this software;
+   b) Reverse-engineer, decompile, or disassemble any component;
+   c) Use the software in any manner that violates applicable law;
+   d) Use the software to collect data without authorization from the data
+      subjects or in violation of applicable privacy regulations.
+
+3. SCANNING AND DATA COLLECTION
+   This software performs passive radio-frequency scanning (WiFi probe requests,
+   Bluetooth advertisements) and GPS-based route recording.
+
+   YOU ARE SOLELY RESPONSIBLE for ensuring that your use of this software
+   complies with all applicable local, state, national, and international laws,
+   including but not limited to laws governing electronic surveillance, radio
+   spectrum monitoring, and data privacy.
+
+   This software is intended for authorized security research, personal route
+   logging, and situational awareness. Use of the software in a manner that
+   violates any law or infringes on the rights of others is strictly prohibited.
+
+4. ADMINISTRATOR PRIVILEGES
+   This software requires Windows Administrator access to perform WiFi scanning.
+   By installing and running this software, you consent to it running with
+   elevated system privileges.
+
+5. DATA STORAGE
+   Scan data, GPS routes, and user preferences are stored locally on your device
+   in:  %USERPROFILE%\SafeFlightMap\
+   This data is not transmitted to any remote server by the software itself.
+   Multi-user features transmit data only to locally-hosted services on your
+   own network.
+
+6. DISCLAIMER OF WARRANTIES
+   THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
+   FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. THE ENTIRE RISK AS TO THE
+   QUALITY AND PERFORMANCE OF THE SOFTWARE IS WITH YOU.
+
+7. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL INVINCIBLE.INC BE LIABLE FOR ANY INDIRECT, INCIDENTAL,
+   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING FROM THE USE OF OR
+   INABILITY TO USE THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+   DAMAGE.
+
+8. TERMINATION
+   This license is effective until terminated. It terminates automatically if
+   you breach any term of this Agreement. Upon termination, you must destroy all
+   copies of the software.
+
+9. GOVERNING LAW
+   This Agreement shall be governed by the laws of the jurisdiction in which the
+   software owner operates, without regard to conflict-of-law principles.
+
+10. ENTIRE AGREEMENT
+    This Agreement constitutes the entire agreement between you and Invincible.Inc
+    concerning the software and supersedes all prior agreements.
+
+If you have questions about this license, contact the operator who provided
+this software.
+
+                                        Invincible.Inc  ·  v1.0
