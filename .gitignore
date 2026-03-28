@@ -10,7 +10,8 @@ dist/
 build/
 *.spec
 
-# Frontend
+# Node
+node_modules/
 frontend/node_modules/
 frontend/dist/
 
@@ -21,3 +22,16 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Archives / old versions
+*.zip
+scanner-map-v3/
+scanner-map-scaffold/
+
+# Claude / local config
+.claude/settings.local.json
+scanner-map/.claude/settings.local.json
+
+# Duplicate bare gitignore file
+gitignore
