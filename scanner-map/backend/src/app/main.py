@@ -1,5 +1,6 @@
 """SafeFlight Map / Invincible.Inc – FastAPI backend v0.3"""
 import sys, os
+from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SRC  = os.path.join(_HERE, "..", "..")
@@ -10,6 +11,7 @@ import time
 import collections
 import threading
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -206,29 +208,84 @@ async def on_startup():
         import logging
         logging.getLogger(__name__).error('ADS-B start failed: %s', e)
 
-import sys
-import os
-
 # ── @architect: Absolute Resource Resolution ────────────────────────────────
-def get_base_path():
-    """ Returns the base path for resources, correctly handling PyInstaller extraction """
-    if getattr(sys, 'frozen', False):
-        # We are running in a bundle (onefile or onedir)
-        # sys._MEIPASS is where PyInstaller extracts everything
-        return sys._MEIPASS
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+def get_base_path() -> Path:
+    """Return the resource root for source and PyInstaller layouts."""
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    return Path(__file__).resolve().parents[3]
+
+def get_windows_download_targets() -> list[Path]:
+    candidates = [
+        _ROOT / "dist_installer" / "InvincibleInc_Setup_v1.1.exe",
+        _ROOT / "explainer" / "Invincible_Setup_v1.1.exe",
+        _ROOT / "dist" / "InvincibleInc" / "InvincibleInc.exe",
+    ]
+    if getattr(sys, "frozen", False):
+        candidates.insert(0, Path(sys.executable).resolve())
+    return candidates
+
+
+def resolve_windows_download_path() -> Path:
+    for candidate in get_windows_download_targets():
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError("No Windows installer artifact found.")
+
+
+def iter_file_chunks(path: Path, chunk_size: int = 64 * 1024):
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+
 
 _BASE = get_base_path()
-_dist = os.path.join(_BASE, "frontend", "dist")
+_ROOT = _BASE
+_dist = (_BASE / "frontend") if getattr(sys, "frozen", False) else (_ROOT / "frontend" / "dist")
+_explainer = _ROOT / "explainer"
 
-if _dist and os.path.isdir(_dist):
+
+@app.api_route("/download/windows", methods=["GET", "HEAD"])
+def download_windows_installer(request: Request):
+    try:
+        download_path = resolve_windows_download_path()
+    except FileNotFoundError:
+        return Response(
+            content='{"detail":"windows installer artifact missing"}',
+            status_code=404,
+            media_type="application/json",
+        )
+
+    headers = {
+        "Content-Disposition": 'attachment; filename="Invincible_Inc_Windows_Sovereign.exe"',
+        "Content-Length": str(download_path.stat().st_size),
+        "Cache-Control": "no-store",
+    }
+    media_type = "application/vnd.microsoft.portable-executable"
+
+    if request.method == "HEAD":
+        return Response(status_code=200, headers=headers, media_type=media_type)
+
+    return StreamingResponse(
+        iter_file_chunks(download_path),
+        headers=headers,
+        media_type=media_type,
+    )
+
+
+if _explainer.is_dir():
+    app.mount("/explainer", StaticFiles(directory=_explainer, html=True), name="explainer")
+
+if _dist.is_dir():
     app.mount("/", StaticFiles(directory=_dist, html=True), name="static")
 
     @app.exception_handler(404)
     async def spa_fallback(request, exc):
-        from fastapi.responses import FileResponse
-        _index = os.path.join(_dist, "index.html")
-        if os.path.isfile(_index):
+        _index = _dist / "index.html"
+        if _index.is_file():
             return FileResponse(_index)
         return {"error": "Lattice UI payload missing. Run build."}
 else:
@@ -239,5 +296,5 @@ else:
         return {
             "status": "active",
             "msg": "Lattice engine running. UI directory not found.",
-            "diag": {"base": _BASE, "dist_target": _dist}
+            "diag": {"base": str(_BASE), "dist_target": str(_dist)}
         }
