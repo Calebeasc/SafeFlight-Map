@@ -4190,7 +4190,7 @@ function TabMap({ data }) {
       fetch('/gps/status')
         .then(r => r.json())
         .then(d => {
-          if (d?.lat != null && d?.lon != null) setGpsPos({ lat: d.lat, lng: d.lon })
+          if (d?.lat != null && d?.lon != null) setGpsPos({ lat: d.lat, lon: d.lon, speed: d.speed ?? null, heading: d.heading ?? null })
         })
         .catch(() => {})
     }
@@ -4296,38 +4296,30 @@ function TabMap({ data }) {
         sidebarState="closed"
       />}
 
-      {/* Map control buttons — top right */}
+      {/* Map control buttons — top right (compact on mobile) */}
       <div style={{
         position:'absolute', top:12, right:12, zIndex:1000,
-        display:'flex', flexDirection:'column', gap:6,
+        display:'flex', flexDirection: isMob ? 'row' : 'column', gap: isMob ? 4 : 6,
       }}>
-        <button onClick={() => setShowMarkers(v => !v)} style={{
-          background: showMarkers ? 'rgba(0,200,255,0.2)' : 'rgba(13,19,34,0.85)',
-          border:`1px solid ${showMarkers ? C.accent : C.border}`,
-          color: showMarkers ? C.accent : C.dim,
-          borderRadius:8, padding:'5px 10px', cursor:'pointer', fontFamily:C.font,
-          fontSize:11, fontWeight:600, backdropFilter:'blur(8px)',
-        }}>📍 Markers</button>
-        <button onClick={() => setShowFlockCameras(v => !v)} style={{
-          background: showFlockCameras ? 'rgba(180,0,255,0.15)' : 'rgba(13,19,34,0.85)',
-          border:`1px solid ${showFlockCameras ? '#b400ff' : C.border}`,
-          color: showFlockCameras ? '#cc44ff' : C.dim,
-          borderRadius:8, padding:'5px 10px', cursor:'pointer', fontFamily:C.font,
-          fontSize:11, fontWeight:600, backdropFilter:'blur(8px)',
-        }}>📷 Flock</button>
-        <button onClick={() => setShowRoute(v => !v)} style={{
-          background: showRoute ? 'rgba(0,200,255,0.2)' : 'rgba(13,19,34,0.85)',
-          border:`1px solid ${showRoute ? C.accent : C.border}`,
-          color: showRoute ? C.accent : C.dim,
-          borderRadius:8, padding:'5px 10px', cursor:'pointer', fontFamily:C.font,
-          fontSize:11, fontWeight:600, backdropFilter:'blur(8px)',
-        }}>〰 Route</button>
+        {[
+          { on: showMarkers, set: setShowMarkers, icon: '📍', label: 'Markers', onBg: 'rgba(0,200,255,0.2)', onBorder: C.accent, onColor: C.accent },
+          { on: showFlockCameras, set: setShowFlockCameras, icon: '📷', label: 'Flock', onBg: 'rgba(180,0,255,0.15)', onBorder: '#b400ff', onColor: '#cc44ff' },
+          { on: showRoute, set: setShowRoute, icon: '〰', label: 'Route', onBg: 'rgba(0,200,255,0.2)', onBorder: C.accent, onColor: C.accent },
+        ].map(b => (
+          <button key={b.label} onClick={() => b.set(v => !v)} style={{
+            background: b.on ? b.onBg : 'rgba(13,19,34,0.85)',
+            border: `1px solid ${b.on ? b.onBorder : C.border}`,
+            color: b.on ? b.onColor : C.dim,
+            borderRadius: 8, padding: isMob ? '5px 7px' : '5px 10px', cursor: 'pointer', fontFamily: C.font,
+            fontSize: isMob ? 13 : 11, fontWeight: 600, backdropFilter: 'blur(8px)',
+          }}>{isMob ? b.icon : `${b.icon} ${b.label}`}</button>
+        ))}
       </div>
 
-      {/* Tool toggles bar — bottom left */}
+      {/* Tool toggles bar — bottom left; offset above speedometer on mobile */}
       <div style={{
-        position:'absolute', bottom:20, left:12, zIndex:1000,
-        display:'flex', flexDirection:'column', gap:6,
+        position:'absolute', bottom: isMob ? 90 : 20, left:12, zIndex:1000,
+        display:'flex', flexDirection:'column', gap: isMob ? 4 : 6,
       }}>
         {/* Tool strip toggle */}
         <button onClick={() => setToolsOpen(v => !v)} style={{
@@ -4378,10 +4370,10 @@ function TabMap({ data }) {
                 background: t.on ? 'rgba(0,200,255,0.12)' : 'rgba(13,19,34,0.85)',
                 border:`1px solid ${t.on ? 'rgba(0,200,255,0.3)' : C.border}`,
                 color: t.on ? C.accent : C.dim,
-                borderRadius:10, padding:'6px 10px', cursor: t.fixed ? 'default' : 'pointer',
-                fontFamily:C.font, fontSize:11, fontWeight:600,
+                borderRadius:10, padding: isMob ? '5px 8px' : '6px 10px', cursor: t.fixed ? 'default' : 'pointer',
+                fontFamily:C.font, fontSize: isMob ? 10 : 11, fontWeight:600,
                 backdropFilter:'blur(8px)', textAlign:'left',
-                display:'flex', flexDirection:'column', gap:2, minWidth:110,
+                display:'flex', flexDirection:'column', gap:2, minWidth: isMob ? 90 : 110,
               }}
             >
               <div style={{ display:'flex', alignItems:'center', gap:5 }}>
@@ -4416,10 +4408,10 @@ function TabMap({ data }) {
       {/* Cell info floating card */}
       {showCellInfo && cellInfo && Object.keys(cellInfo).length > 0 && (
         <div style={{
-          position:'absolute', top:60, left:12, zIndex:999,
+          position:'absolute', top: isMob ? 48 : 60, left:12, zIndex:999,
           background:'rgba(13,19,34,0.92)', border:`1px solid ${C.border}`,
-          borderRadius:10, padding:'10px 14px', fontFamily:C.font,
-          backdropFilter:'blur(12px)', fontSize:11, minWidth:180,
+          borderRadius:10, padding: isMob ? '8px 10px' : '10px 14px', fontFamily:C.font,
+          backdropFilter:'blur(12px)', fontSize: isMob ? 10 : 11, minWidth: isMob ? 150 : 180,
         }}>
           <div style={{ fontSize:10, fontWeight:700, color:C.accent, marginBottom:6, letterSpacing:0.5 }}>CELL SIGNAL</div>
           {Object.entries(cellInfo).slice(0,6).map(([k,v]) => (
@@ -4459,11 +4451,12 @@ function TabMap({ data }) {
       {/* Dev overlay panel */}
       {overlayOpen && (
         <div style={{
-          position:'absolute', bottom:60, right:12, zIndex:1000,
+          position:'absolute', bottom: isMob ? 90 : 60, right:12, zIndex:1000,
           background:'rgba(13,19,34,0.95)', border:`1px solid ${C.border}`,
-          borderRadius:12, padding:'12px 14px', width:260,
+          borderRadius:12, padding: isMob ? '10px 10px' : '12px 14px', width: isMob ? 220 : 260,
           backdropFilter:'blur(16px)', fontFamily:C.font,
-          display:'flex', flexDirection:'column', gap:10,
+          display:'flex', flexDirection:'column', gap: isMob ? 7 : 10,
+          maxHeight: isMob ? '50vh' : 'none', overflowY: isMob ? 'auto' : 'visible',
         }}>
           {/* Stats row */}
           <div style={{ display:'flex', gap:8 }}>
