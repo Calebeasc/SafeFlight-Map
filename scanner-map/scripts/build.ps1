@@ -3,7 +3,7 @@
 #  Run from the repo root:  .\scanner-map\scripts\build.ps1
 #
 #  Produces:
-#    scanner-map\user_app\dist\InvincibleInc\InvincibleInc.exe  (raw bundle)
+#    scanner-map\dist\InvincibleInc\InvincibleInc.exe           (raw bundle)
 #    scanner-map\dist_installer\InvincibleInc_Setup_v1.1.exe    (installer)
 #
 #  Requirements:
@@ -32,12 +32,25 @@ $InstallerDir= Join-Path $Root 'installer'
 $VenvDir     = Join-Path $Root '.venv'
 $Python      = if (Test-Path "$VenvDir\Scripts\python.exe") { "$VenvDir\Scripts\python.exe" } else { 'python' }
 $Pip         = if (Test-Path "$VenvDir\Scripts\pip.exe")    { "$VenvDir\Scripts\pip.exe"    } else { 'pip'    }
+$SpecPath    = Join-Path $UserAppDir 'user.spec'
 
 function Step($n, $total, $msg) {
     Write-Host "`n[$n/$total] $msg" -ForegroundColor Yellow
 }
 function OK($msg) { Write-Host "      $msg" -ForegroundColor Green }
 function Fail($msg) { Write-Error $msg }
+function Repair-PyInstallerLayout($distDir) {
+    $internalDir = Join-Path $distDir '_internal'
+    if (-not (Test-Path $internalDir)) { return }
+    $dll = Get-ChildItem -Path $internalDir -Filter 'python312.dll' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $dll) {
+        $dll = Get-ChildItem -Path $internalDir -Filter 'python3*.dll' -File -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+    }
+    if ($dll) {
+        Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $distDir $dll.Name) -Force
+        OK "Mirrored $($dll.Name) to bundle root."
+    }
+}
 
 $TotalSteps = 5
 if ($SkipInstaller) { $TotalSteps = 4 }
@@ -90,8 +103,8 @@ if (-not $SkipIcon) {
     }
 }
 
-# Also generate installer wizard images if they don't exist
-if (-not (Test-Path "$InstallerDir\wizard_banner.bmp")) {
+# Also generate installer wizard images if they don't exist and we plan to build the installer
+if (-not $SkipInstaller -and -not (Test-Path "$InstallerDir\wizard_banner.bmp")) {
     Write-Host '      Generating installer wizard images...' -ForegroundColor DarkGray
     & $Python "$InstallerDir\generate_assets.py"
 }
@@ -99,11 +112,13 @@ if (-not (Test-Path "$InstallerDir\wizard_banner.bmp")) {
 # ── 4. PyInstaller ────────────────────────────────────────────────────────────
 Step 4 $TotalSteps 'Running PyInstaller...'
 Push-Location $Root
-& $Python -m PyInstaller "$UserAppDir\user.spec" --clean --noconfirm
+if (-not (Test-Path $SpecPath)) { Fail "Missing PyInstaller spec: $SpecPath" }
+& $Python -m PyInstaller $SpecPath --clean --noconfirm
 Pop-Location
 
-$ExePath = "$UserAppDir\dist\InvincibleInc\InvincibleInc.exe"
+$ExePath = "$Root\dist\InvincibleInc\InvincibleInc.exe"
 if (-not (Test-Path $ExePath)) { Fail "PyInstaller did not produce InvincibleInc.exe" }
+Repair-PyInstallerLayout "$Root\dist\InvincibleInc"
 $ExeSize = [math]::Round((Get-Item $ExePath).Length / 1MB, 1)
 OK "InvincibleInc.exe built ($ExeSize MB)."
 
@@ -115,7 +130,7 @@ if (-not $SkipInstaller) {
     $IsccPaths = @(
         'iscc.exe',
         'C:\Program Files (x86)\Inno Setup 6\iscc.exe',
-        'C:\Program Files\Inno Setup 6\iscc.exe',
+        'C:\Program Files\Inno Setup 6\iscc.exe'
     )
     $Iscc = $null
     foreach ($p in $IsccPaths) {

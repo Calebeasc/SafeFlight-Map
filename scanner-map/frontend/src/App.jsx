@@ -6,9 +6,11 @@ import SettingsPanel from './components/SettingsPanel'
 import TargetsPanel from './components/TargetsPanel'
 import DataPanel from './components/DataPanel'
 import UserModal, { OtpVerifyModal } from './components/UserModal'
+import SystemAccessModal from './components/SystemAccessModal'
 import UpdateToast from './components/UpdateToast'
 import StatsPanel from './components/StatsPanel'
 import ReplayPanel from './components/ReplayPanel'
+import { useSovereign } from './context/SovereignContext'
 import { playWatcherAlert, playStopperAlert, playGenericAlert,
          playTailAlert, playHotspotAlert, resumeAudio } from './utils/audio'
 import { enableWakePrevention, tryAutoWakeLock } from './utils/wakelock'
@@ -112,8 +114,21 @@ async function doRegister(username, vehicle) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
+  const { isDev } = useSovereign()
+  const [mode, setMode] = useState('user')
 
-  // ── State ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    // Sync mode with sovereign context
+    if (isDev) setMode('sovereign')
+    else setMode('user')
+  }, [isDev])
+
+  const theme = {
+    accent: mode === 'sovereign' ? '#FF453A' : '#00D4FF',
+    bg: '#0A0E14',
+    dim: 'rgba(180,195,220,0.5)'
+  }
+
   const [running, setRunning]         = useState(false)
   const [timeRange, setTimeRange]     = useState(3600000)
   const [heatCells, setHeatCells]     = useState([])
@@ -123,6 +138,8 @@ export default function App() {
   const [showRoute, setShowRoute]             = useState(true)
   const [showFlockCameras, setShowFlockCameras] = useState(true)
   const [flockCameras, setFlockCameras]       = useState([])
+  const [showAircraft, setShowAircraft]       = useState(true)
+  const [aircraftData, setAircraftData]       = useState([]) // @tron: Live ADS-B flight data
   const [loading, setLoading]         = useState(false)
   const [lastPoll, setLastPoll]       = useState(null)  // eslint-disable-line no-unused-vars
   const [userPos, setUserPos]         = useState(null)
@@ -498,17 +515,20 @@ export default function App() {
     const id = ++alertIdRef.current
     const vol = appSettings.audio_volume ?? 0.7
 
-    // Feature 2: tail detection — register the flagged key and play distinct tone
+    // Feature 2: tail detection
     if (alert.type === 'tail_detection') {
       if (alert.target_key) {
         setTailKeys(prev => new Set([...prev, alert.target_key]))
       }
-      setAlerts(prev => [...prev.slice(-4), {
-        ...alert, id,
-        type: alert.label || 'Device',
-        priority: 'high',
-        icon: '🔁',
-      }])
+      setAlerts(prev => {
+        const safePrev = Array.isArray(prev) ? prev : [];
+        return [...safePrev.slice(-4), {
+          ...alert, id,
+          type: alert.label || 'Device',
+          priority: 'high',
+          icon: '🔁',
+        }];
+      })
       playTailAlert(vol)
       if (Notification.permission === 'granted') {
         new Notification('⚠ Tail detected', { body: alert.message || 'Device keeps appearing', silent: true })
@@ -548,6 +568,22 @@ export default function App() {
         new Notification('🔥 Stopper Hotspot nearby', { body: alert.message, silent: true })
       }
       setTimeout(() => setAlerts(prev => prev.filter(a => a.id !== id)), 10000)
+      return
+    }
+
+    // @tron: Police Aircraft Alert
+    if (alert.type === 'Police-Aircraft') {
+      setAlerts(prev => [...prev.slice(-4), {
+        ...alert, id,
+        priority: 'high',
+        icon: '🚁',
+        color: 'red',
+      }])
+      playStopperAlert(vol, 'siren') // Use siren for airborne threats
+      if (Notification.permission === 'granted') {
+        new Notification('⚠️ POLICE AIR DETECTED', { body: alert.message, silent: false })
+      }
+      setTimeout(() => setAlerts(prev => prev.filter(a => a.id !== id)), 15000)
       return
     }
 
@@ -630,6 +666,18 @@ export default function App() {
         .catch(() => {})
     load()
     const id = setInterval(load, 30 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  // ── @tron: ADS-B Aircraft Tracking (refresh every 5 s) ───────────────────
+  useEffect(() => {
+    const load = () =>
+      fetch('/adsb/status')
+        .then(r => r.json())
+        .then(d => setAircraftData(d.aircraft || []))
+        .catch(() => {})
+    load()
+    const id = setInterval(load, 5000)
     return () => clearInterval(id)
   }, [])
 
@@ -841,7 +889,13 @@ export default function App() {
       </div>
 
       {/* Panels */}
-      {panel==='settings'     && <SettingsPanel    onClose={()=>setPanel(null)} onSaved={s=>{setAppSettings(s);setScanMode(s.scan_mode||'idle')}}/>}
+  const [panelMode, setPanelMode]     = useState(null)
+
+  // ... rest of state ...
+
+  {panel==='settings' && <SettingsPanel onClose={()=>setPanel(null)} onOpenUserModal={(m) => { setPanel('user_modal'); setPanelMode(m); }} onOpenSystemAccess={() => setPanel('system_access')} onSaved={s=>{setAppSettings(s);setScanMode(s.scan_mode||'idle')}}/>}
+  {panel==='user_modal' && <UserModal initialMode={panelMode} onDone={handleUserDone} onClose={() => { setPanel(null); setPanelMode(null); }} />}
+  {panel==='system_access' && <SystemAccessModal onClose={() => setPanel(null)} />}
       {panel==='targets'      && <TargetsPanel     onClose={()=>setPanel(null)}/>}
       {panel==='data'         && <DataPanel        onClose={()=>setPanel(null)}/>}
       {panel==='leaderboard'  && <StatsPanel onClose={()=>setPanel(null)} myUsername={username} deviceId={DEVICE_ID}/>}
@@ -853,6 +907,8 @@ export default function App() {
         showRoute={showRoute} setShowRoute={setShowRoute}
         showFlockCameras={showFlockCameras} setShowFlockCameras={setShowFlockCameras}
         flockCameraCount={flockCameras.length}
+        showAircraft={showAircraft} setShowAircraft={setShowAircraft}
+        aircraftCount={aircraftData.length}
         onToggle={toggleScanning}
         heatCells={heatCells} encounters={encounters} routePoints={routePoints}
         userPos={userPos} api={API} scanMode={scanMode}
@@ -890,6 +946,7 @@ export default function App() {
           stopperTrails={stopperTrails}
           flockCameras={flockCameras}
           showFlockCameras={showFlockCameras}
+          aircraftData={showAircraft ? aircraftData : []}
           replayMode={replayMode}
           replayEncounters={replayEncounters}
           replayRoute={replayRoute}
@@ -909,6 +966,7 @@ export default function App() {
           running={running}
           watcherCount={encounters.filter(e=>e.label==='Fun-Watcher').length}
           stopperCount={encounters.filter(e=>e.label==='Fun-Stopper').length}
+          isOwner={mode === 'sovereign'}
         />
 
         {/* Scan console — desktop only, shows recent special device detections */}

@@ -71,13 +71,13 @@ english.WelcomeLabel2=This will install [name] version [ver] on your computer.%n
 english.FinishedLabel=Setup has finished installing [name] on your computer.%n%nYour scan data is stored in:%n  %%USERPROFILE%%\SafeFlightMap\%n%nThe app runs in the system tray — look for the radar icon after launch.
 
 [Tasks]
-Name: "desktopicon";   Description: "Create a &desktop shortcut";                GroupDescription: "Shortcuts:";      Flags: checked
-Name: "startmenuicon"; Description: "Create a Start &Menu shortcut";             GroupDescription: "Shortcuts:";      Flags: checked
+Name: "desktopicon";   Description: "Create a &desktop shortcut";                GroupDescription: "Shortcuts:"
+Name: "startmenuicon"; Description: "Create a Start &Menu shortcut";             GroupDescription: "Shortcuts:"
 Name: "autostart";     Description: "Launch &automatically when Windows starts"; GroupDescription: "Startup options:"; Flags: unchecked
 
 [Files]
 ; Copy the entire PyInstaller output folder (built by user.spec)
-Source: "{#SourcePath}..\user_app\dist\InvincibleInc\*"; \
+Source: "{#SourcePath}..\dist\InvincibleInc\*"; \
     DestDir: "{app}"; \
     Flags: ignoreversion recursesubdirs createallsubdirs
 

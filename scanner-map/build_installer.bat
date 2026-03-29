@@ -79,14 +79,14 @@ echo         OK
 :: ── Step 3: Bundle with PyInstaller ─────────────────────────────────────────
 set /a STEP+=1
 echo  [%STEP%/5]  Bundling app with PyInstaller  ^(~60 sec^)...
-cd "%ROOT%backend"
-pyinstaller invincible.spec --clean --noconfirm >"%ROOT%build_pyinstaller.log" 2>&1
+cd "%ROOT%"
+pyinstaller user_app\user.spec --clean --noconfirm >"%ROOT%build_pyinstaller.log" 2>&1
 if errorlevel 1 (
     echo         FAILED  — see build_pyinstaller.log
     set /a ERRORS+=1
     goto :error
 )
-if not exist "%ROOT%backend\dist\InvincibleInc\InvincibleInc.exe" (
+if not exist "%ROOT%dist\InvincibleInc\InvincibleInc.exe" (
     echo         FAILED  — InvincibleInc.exe not found after build
     set /a ERRORS+=1
     goto :error

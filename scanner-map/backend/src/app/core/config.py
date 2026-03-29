@@ -23,6 +23,19 @@ class Settings:
             f.write(secret)
         return secret
 
+    _JWT_SECRET_FILE: str = os.path.join(os.path.expanduser('~'), 'SafeFlightMap', '.jwt_secret')
+
+    @property
+    def JWT_SECRET(self) -> str:
+        os.makedirs(os.path.dirname(self._JWT_SECRET_FILE), exist_ok=True)
+        if os.path.exists(self._JWT_SECRET_FILE):
+            with open(self._JWT_SECRET_FILE) as f:
+                return f.read().strip()
+        secret = secrets.token_urlsafe(48)
+        with open(self._JWT_SECRET_FILE, 'w') as f:
+            f.write(secret)
+        return secret
+
     # Scanning — runtime-editable via /settings
     WIFI_GAP_TIMEOUT_S:     float = 2.0
     BLE_GAP_TIMEOUT_S:      float = 1.0

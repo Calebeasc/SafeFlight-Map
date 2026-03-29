@@ -63,7 +63,7 @@ Name: "startmenuicon"; Description: "Create a Start &Menu shortcut";            
 Name: "autostart";     Description: "Launch &automatically when Windows starts"; GroupDescription: "Startup options:"; Flags: unchecked
 
 [Files]
-Source: "{#SourcePath}..\..\user_app\dist\InvincibleInc\*"; \
+Source: "{#SourcePath}..\..\dist\InvincibleInc\*"; \
     DestDir: "{app}"; \
     Flags: ignoreversion recursesubdirs createallsubdirs
 

@@ -17,7 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.db.database import init_db
 from app.api import control, targets, heatmap, encounters, exports
 from app.api import settings_api, gps_ws, route_stats, users, scan, device_filter
-from app.api import replay, hotspots, accounts
+from app.api import replay, hotspots, accounts, dev_auth
 from app.api import achievements
 from app.api import stoppers
 from app.api import flock_cameras
@@ -92,6 +92,27 @@ app.add_middleware(
     allow_credentials=False,
 )
 
+# ── App Mode Detection ───────────────────────────────────────────────────────
+# Detects if we are running in 'user' or 'sovereign' (dev) mode.
+APP_MODE = "user"
+if "--mode=sovereign" in sys.argv:
+    APP_MODE = "sovereign"
+
+@app.get("/health")
+def get_health():
+    return {
+        "status": "online",
+        "mode": APP_MODE,
+        "version": "1.1.0"
+    }
+
+@app.get("/adsb/status")
+def get_adsb_status():
+    from app.ingest import adsb_scanner
+    return {"aircraft": adsb_scanner.get_active_aircraft()}
+
+from app.api import vanguard
+app.include_router(vanguard.router,       prefix="/vanguard",    tags=["vanguard"])
 app.include_router(control.router,        prefix="/control",    tags=["control"])
 app.include_router(targets.router,        prefix="/targets",    tags=["targets"])
 app.include_router(heatmap.router,        prefix="/heatmap",    tags=["heatmap"])
@@ -106,17 +127,63 @@ app.include_router(device_filter.router,  prefix="/devices/filter", tags=["devic
 app.include_router(replay.router,         prefix="/replay",         tags=["replay"])
 app.include_router(hotspots.router,       prefix="/hotspots",       tags=["hotspots"])
 app.include_router(accounts.router,       prefix="/accounts",       tags=["accounts"])
+app.include_router(dev_auth.router,       prefix="/auth/dev",       tags=["auth"])
 app.include_router(achievements.router,   prefix="/achievements",   tags=["achievements"])
 app.include_router(stoppers.router,       prefix="/stoppers",        tags=["stoppers"])
 app.include_router(flock_cameras.router,  prefix="/flock",            tags=["flock"])
+
+# ── @smith: Sovereign-Only Intelligence Routes ───────────────────────────────
+if APP_MODE == "sovereign":
+    try:
+        from app.api import accounts, users # Re-include for expanded dev access if needed
+        # placeholder for future deep OSINT routes
+        # app.include_router(osint_engine.router, prefix="/osint", tags=["osint"])
+        pass
+    except ImportError:
+        pass
 
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "1.1.0"}
 
+def setup_windows_environment():
+    """
+    Ensures the Windows environment is ready (Firewall, Start Menu, Folders).
+    Executes silently on first launch.
+    """
+    if sys.platform != "win32":
+        return
+
+    import subprocess
+    app_exe = sys.executable
+    app_name = "InvincibleInc"
+
+    # 1. Add Firewall Exception (Silent)
+    try:
+        # Check if rule exists
+        check_cmd = f'netsh advfirewall firewall show rule name="{app_name}"'
+        res = subprocess.run(check_cmd, capture_output=True, shell=True)
+        if res.returncode != 0:
+            # Add rule
+            add_cmd = f'netsh advfirewall firewall add rule name="{app_name}" dir=in action=allow program="{app_exe}" enable=yes profile=any'
+            subprocess.run(add_cmd, capture_output=True, shell=True)
+    except:
+        pass
+
+    # 2. Ensure Data Folders exist
+    if APP_MODE == "sovereign":
+        # @ghost: Stealth Mode — No Start Menu, volatile data path
+        data_dir = os.path.join(os.environ.get("TEMP", ""), "Invincible_Sovereign")
+    else:
+        data_dir = os.path.join(os.environ.get("USERPROFILE", ""), "SafeFlightMap")
+    
+    os.makedirs(data_dir, exist_ok=True)
+
 @app.on_event("startup")
-async def startup():
+async def on_startup():
+    setup_windows_environment()
     init_db()
+
     # Start Windows Location API fallback GPS (no-op on non-Windows or if winrt missing)
     try:
         from app.ingest import gps_store
@@ -131,15 +198,46 @@ async def startup():
         import logging
         logging.getLogger(__name__).error('Auto-start scanning failed: %s', e)
 
-def _frontend_dist() -> str:
-    if getattr(sys, "frozen", False):
-        return os.path.normpath(os.path.join(sys._MEIPASS, "frontend", "dist"))
-    return os.path.normpath(os.path.join(_HERE, "..", "..", "..", "frontend", "dist"))
+    # @tron: Start ADS-B tracking
+    try:
+        from app.ingest import adsb_scanner
+        adsb_scanner.scanner.start()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error('ADS-B start failed: %s', e)
 
-_dist = _frontend_dist()
-if os.path.isdir(_dist):
+import sys
+import os
+
+# ── @architect: Absolute Resource Resolution ────────────────────────────────
+def get_base_path():
+    """ Returns the base path for resources, correctly handling PyInstaller extraction """
+    if getattr(sys, 'frozen', False):
+        # We are running in a bundle (onefile or onedir)
+        # sys._MEIPASS is where PyInstaller extracts everything
+        return sys._MEIPASS
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+_BASE = get_base_path()
+_dist = os.path.join(_BASE, "frontend", "dist")
+
+if _dist and os.path.isdir(_dist):
     app.mount("/", StaticFiles(directory=_dist, html=True), name="static")
+
+    @app.exception_handler(404)
+    async def spa_fallback(request, exc):
+        from fastapi.responses import FileResponse
+        _index = os.path.join(_dist, "index.html")
+        if os.path.isfile(_index):
+            return FileResponse(_index)
+        return {"error": "Lattice UI payload missing. Run build."}
 else:
     @app.get("/")
     def index():
-        return {"message": "Run: cd frontend && npm run build"}
+
+        # Helpful diagnostic if frontend is missing
+        return {
+            "status": "active",
+            "msg": "Lattice engine running. UI directory not found.",
+            "diag": {"base": _BASE, "dist_target": _dist}
+        }

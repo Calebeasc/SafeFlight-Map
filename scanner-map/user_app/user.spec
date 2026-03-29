@@ -1,96 +1,55 @@
 # -*- mode: python ; coding: utf-8 -*-
-#
-# PyInstaller spec for Invincible.Inc USER app
-# Full WiFi + BLE scanner bundled — requires UAC admin at runtime.
-#
-# Build from repo root:
-#   pyinstaller user_app/user.spec --clean --noconfirm
-#
-# Output: user_app/dist/InvincibleInc/InvincibleInc.exe
-#
 
-import os
+from pathlib import Path
 
-HERE          = os.path.abspath(os.path.dirname(SPEC))
-REPO_ROOT     = os.path.normpath(os.path.join(HERE, '..'))
-FRONTEND_DIST = os.path.normpath(os.path.join(REPO_ROOT, 'frontend', 'dist'))
-BACKEND_SRC   = os.path.normpath(os.path.join(REPO_ROOT, 'backend', 'src'))
-MANIFEST      = os.path.normpath(os.path.join(REPO_ROOT, 'backend', 'invincible.manifest'))
-ICON          = os.path.normpath(os.path.join(REPO_ROOT, 'backend', 'assets', 'icon.ico'))
+ROOT = Path.cwd()
+USER_APP = ROOT / "user_app"
+BACKEND_SRC = ROOT / "backend" / "src"
+FRONTEND_DIST = ROOT / "frontend" / "dist"
+INSTALLER_ICON = ROOT / "installer" / "icon.ico"
 
-block_cipher = None
+datas = [
+    (str(BACKEND_SRC), "src"),
+]
+
+if FRONTEND_DIST.exists():
+    datas.append((str(FRONTEND_DIST), "frontend"))
 
 a = Analysis(
-    [os.path.join(HERE, 'run.py')],
-    pathex=[BACKEND_SRC],
+    [str(USER_APP / "run.py")],
+    pathex=[str(ROOT), str(BACKEND_SRC)],
     binaries=[],
-    datas=[
-        (FRONTEND_DIST, 'frontend/dist'),
-        (BACKEND_SRC,   'src'),
-    ],
+    datas=datas,
     hiddenimports=[
-        # uvicorn
-        'uvicorn.lifespan.on', 'uvicorn.lifespan.off',
-        'uvicorn.protocols.websockets.websockets_impl',
-        'uvicorn.protocols.websockets.wsproto_impl',
-        'uvicorn.protocols.http.h11_impl',
-        'uvicorn.protocols.http.httptools_impl',
-        'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.loops.asyncio',
-        # FastAPI / Starlette
-        'fastapi', 'fastapi.middleware.cors', 'fastapi.staticfiles',
-        'fastapi.responses', 'starlette.routing', 'starlette.staticfiles',
-        'starlette.middleware.cors', 'starlette.websockets',
-        'anyio', 'anyio._backends._asyncio',
-        # BLE
-        'bleak', 'bleak.backends.winrt.scanner', 'bleak.backends.winrt.client',
-        # pywebview
-        'webview', 'webview.platforms.winforms',
-        'webview.platforms.mshtml', 'webview.platforms.edgechromium',
-        # pystray + Pillow
-        'pystray', 'pystray._win32', 'PIL', 'PIL.Image', 'PIL.ImageDraw',
-        # App modules
-        'app.main', 'app.db.database',
-        'app.core.config', 'app.core.allowlist', 'app.core.runtime_settings',
-        'app.api.control', 'app.api.targets', 'app.api.heatmap',
-        'app.api.encounters', 'app.api.exports', 'app.api.settings_api',
-        'app.api.gps_ws', 'app.api.gps', 'app.api.route_stats',
-        'app.api.users', 'app.api.scan',
-        'app.ingest.scanner', 'app.ingest.wifi_scanner',
-        'app.ingest.ble_scanner', 'app.ingest.gps_store',
-        'app.ingest.gps_relay', 'app.ingest.route_recorder',
-        'app.processing.aggregator',
-        # Windows stdlib
-        'winreg', 'ctypes', 'sqlite3',
+        "uvicorn.logging",
+        "uvicorn.loops.auto",
+        "uvicorn.protocols.http.auto",
+        "uvicorn.protocols.websockets.auto",
+        "pystray._win32",
+        "webview.platforms.edgechromium",
+        "webview.platforms.winforms",
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'numpy', 'pandas', 'scipy', 'IPython'],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
+    excludes=["tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6", "matplotlib"],
     noarchive=False,
 )
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
-    name='InvincibleInc',
+    name="InvincibleInc",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     console=False,
-    disable_windowed_traceback=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    manifest=MANIFEST,    # UAC elevation — WiFi scanning needs admin
-    icon=ICON if os.path.exists(ICON) else None,
+    icon=str(INSTALLER_ICON) if INSTALLER_ICON.exists() else None,
+    uac_admin=True,
 )
 
 coll = COLLECT(
@@ -101,5 +60,6 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='InvincibleInc',
+    name="InvincibleInc",
+    contents_directory="_internal",
 )

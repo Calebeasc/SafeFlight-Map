@@ -135,6 +135,13 @@ def init_db():
     );
     CREATE INDEX IF NOT EXISTS idx_accounts_id ON accounts(identifier);
 
+    CREATE TABLE IF NOT EXISTS dev_operators (
+        email         TEXT PRIMARY KEY,
+        password_hash TEXT NOT NULL,
+        created_ms    INTEGER NOT NULL,
+        last_login_ms INTEGER
+    );
+
     -- Friends / social connections (keyed by username)
     CREATE TABLE IF NOT EXISTS friends (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,

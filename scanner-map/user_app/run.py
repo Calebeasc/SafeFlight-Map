@@ -41,8 +41,17 @@ log.info('Invincible.Inc launcher starting — Python %s', sys.version.split()[0
 # ── Bundled src path ──────────────────────────────────────────────────────────
 
 if getattr(sys, 'frozen', False):
-    # Running as PyInstaller bundle — src is under _MEIPASS
-    src_path = os.path.join(sys._MEIPASS, 'src')
+    bundle_roots = [
+        getattr(sys, '_MEIPASS', ''),
+        os.path.dirname(sys.executable),
+        os.path.join(os.path.dirname(sys.executable), '_internal'),
+    ]
+    src_path = ''
+    for root in bundle_roots:
+        candidate = os.path.join(root, 'src')
+        if root and os.path.exists(candidate):
+            src_path = candidate
+            break
 else:
     # Running from source — src is in ../backend/src
     _here    = os.path.dirname(os.path.abspath(__file__))
