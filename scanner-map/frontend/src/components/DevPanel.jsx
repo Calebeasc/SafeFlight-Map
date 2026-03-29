@@ -4426,10 +4426,10 @@ function TabMap({ data }) {
       {/* Aggressive scanner card */}
       {showAggressive && aggressiveData && (
         <div style={{
-          position:'absolute', top: showCellInfo ? 200 : 60, left:12, zIndex:999,
+          position:'absolute', top: showCellInfo ? (isMob ? 170 : 200) : (isMob ? 48 : 60), left:12, zIndex:999,
           background:'rgba(13,19,34,0.92)', border:`1px solid rgba(255,159,10,0.2)`,
-          borderRadius:10, padding:'10px 14px', fontFamily:C.font,
-          backdropFilter:'blur(12px)', fontSize:11, minWidth:180,
+          borderRadius:10, padding: isMob ? '8px 10px' : '10px 14px', fontFamily:C.font,
+          backdropFilter:'blur(12px)', fontSize: isMob ? 10 : 11, minWidth: isMob ? 150 : 180,
         }}>
           <div style={{ fontSize:10, fontWeight:700, color:C.orange, marginBottom:6, letterSpacing:0.5 }}>AGGRESSIVE SCAN</div>
           <div style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'3px 0' }}>
