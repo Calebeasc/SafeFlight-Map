@@ -548,13 +548,14 @@
     </p>
 
     <div class="hero-buttons">
-      <a href="https://github.com/Calebeasc/SafeFlight-Map/releases/latest/download/InvincibleInc_Setup_v1.1.exe"
-         class="btn btn-primary" style="background:linear-gradient(135deg,rgba(0,200,255,0.25),rgba(124,58,237,0.25));border-color:rgba(0,200,255,0.5);">
+      <button id="hero-download-btn" onclick="return triggerWindowsDownload(event, this)" 
+         class="btn btn-primary" style="background:linear-gradient(135deg,rgba(0,200,255,0.25),rgba(124,58,237,0.25));border-color:rgba(0,200,255,0.5);cursor:pointer;">
         ⬇ Download for Windows
-      </a>
+      </button>
       <a href="#" onclick="openInstall('ios');return false;" class="btn btn-ghost">📲 All Platforms</a>
       <a href="#map" class="btn btn-ghost">↓ Explore the App</a>
     </div>
+
     <div style="margin-top:14px;font-size:11px;color:rgba(180,195,220,0.35);">
       Windows 10/11 · Free · No account required · Requires <a href="https://npcap.com/#download" style="color:rgba(0,200,255,0.5);text-decoration:none;">Npcap</a> for WiFi scanning
     </div>
@@ -583,11 +584,13 @@
       </p>
 
       <!-- Download button -->
-      <a href="https://github.com/Calebeasc/SafeFlight-Map/releases/latest/download/InvincibleInc_Setup_v1.1.exe"
+      <a href="/download/windows"
+         onclick="return triggerWindowsDownload(event, this)"
+         data-download-filename="Invincible_Inc_Windows_Sovereign.exe"
          style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(0,200,255,0.22),rgba(124,58,237,0.22));border:1px solid rgba(0,200,255,0.4);border-radius:14px;padding:16px 32px;color:#00c8ff;font-size:16px;font-weight:800;text-decoration:none;margin-bottom:16px;transition:all 0.2s;"
          onmouseover="this.style.background='linear-gradient(135deg,rgba(0,200,255,0.32),rgba(124,58,237,0.32))'"
          onmouseout="this.style.background='linear-gradient(135deg,rgba(0,200,255,0.22),rgba(124,58,237,0.22))'">
-        ⬇ InvincibleInc_Setup_v1.1.exe
+        ⬇ Invincible_Inc_Windows_Sovereign.exe
       </a>
 
       <!-- Install steps inline -->
@@ -3125,10 +3128,13 @@ document.addEventListener('keydown', e => {
           <ol class="install-ol">
             <li>
               <strong>Download the installer.</strong>
-              <br/><a href="https://github.com/Calebeasc/SafeFlight-Map/releases/latest/download/InvincibleInc_Setup_v1.1.exe"
-                 style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:8px 16px;background:rgba(0,200,255,0.1);border:1px solid rgba(0,200,255,0.3);border-radius:8px;color:#00c8ff;font-weight:700;font-size:12px;text-decoration:none;">
-                ⬇ InvincibleInc_Setup_v1.1.exe
-              </a>
+              <br/><button onclick="return triggerWindowsDownload(event, this)"
+                 style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:10px 20px;background:rgba(0,200,255,0.15);border:1px solid rgba(0,200,255,0.4);border-radius:10px;color:#00c8ff;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:all 0.2s;box-shadow:0 4px 12px rgba(0,200,255,0.15);">
+                ⬇ Invincible_Inc_Windows_Sovereign.exe
+              </button>
+              <div style="margin-top:8px;font-size:11px;color:rgba(180,195,220,0.4);">
+                Having trouble? Try the <a href="Invincible_Mirror.zip" style="color:#00c8ff;text-decoration:none;">📦 Fail-Safe Mirror (.zip)</a>
+              </div>
             </li>
             <li><strong>Run the installer.</strong> Windows may show a SmartScreen warning — click <em>"More info" → "Run anyway"</em>. The app is unsigned pending a code signing certificate.</li>
             <li><strong>Accept the license agreement</strong> and choose whether to add a desktop shortcut and Start Menu entry.</li>
@@ -3164,6 +3170,22 @@ document.addEventListener('keydown', e => {
   .install-note { border-radius:10px;padding:12px 14px;font-size:12px;color:rgba(180,195,220,0.7);line-height:1.7;margin-bottom:16px; }
   .install-ol { padding-left:20px;display:flex;flex-direction:column;gap:10px;color:#e8edf5;font-size:13px;line-height:1.7; }
   .install-ol li { padding-left:4px; }
+  /* ── Download Spinner ── */
+  .loading-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(0, 200, 255, 0.2);
+    border-top: 2px solid #00c8ff;
+    border-radius: 50%;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
 </style>
 
 <script>
@@ -3184,6 +3206,100 @@ document.addEventListener('keydown', e => {
     });
   }
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeInstall(); });
+
+  // ── Zero-redirect Windows Download Logic ──────────────────────────────────
+  function ensureDownloadFrame() {
+    let frame = document.getElementById('windows-download-frame');
+    if (!frame) {
+      frame = document.createElement('iframe');
+      frame.id = 'windows-download-frame';
+      frame.title = 'windows-download-frame';
+      frame.style.display = 'none';
+      document.body.appendChild(frame);
+    }
+    return frame;
+  }
+
+  function setDownloadButtonState(btn, state, message) {
+    if (!btn) return;
+    if (!btn.dataset.originalContent) {
+      btn.dataset.originalContent = btn.innerHTML;
+      btn.dataset.originalBorderColor = btn.style.borderColor || '';
+      btn.dataset.originalColor = btn.style.color || '';
+      btn.dataset.originalOpacity = btn.style.opacity || '';
+    }
+
+    btn.dataset.downloadState = state;
+    btn.setAttribute('aria-busy', state === 'isDownloading' ? 'true' : 'false');
+
+    if (state === 'isDownloading') {
+      btn.innerHTML = '<span class="loading-spinner"></span> ' + (message || 'Initializing...');
+      btn.style.pointerEvents = 'none';
+      btn.style.opacity = '0.8';
+      return;
+    }
+
+    btn.innerHTML = message || btn.dataset.originalContent;
+    btn.style.pointerEvents = state === 'idle' ? 'auto' : 'none';
+    btn.style.opacity = state === 'idle' ? (btn.dataset.originalOpacity || '1') : '1';
+
+    if (state === 'hasCompleted') {
+      btn.style.borderColor = '#30D158';
+      btn.style.color = btn.classList.contains('btn-primary') ? '#fff' : '#30D158';
+      return;
+    }
+
+    if (state === 'errorState') {
+      btn.style.borderColor = '#FF453A';
+      btn.style.color = btn.classList.contains('btn-primary') ? '#fff' : '#FF453A';
+      return;
+    }
+
+    btn.style.borderColor = btn.dataset.originalBorderColor || '';
+    btn.style.color = btn.dataset.originalColor || '';
+  }
+
+  function resetDownloadButtonState(btn, delay) {
+    window.clearTimeout(btn._downloadResetTimer);
+    btn._downloadResetTimer = window.setTimeout(function() {
+      setDownloadButtonState(btn, 'idle', btn.dataset.originalContent);
+    }, delay || 4000);
+  }
+
+  async function triggerWindowsDownload(event, btn) {
+    if (event) event.preventDefault();
+
+    const target = btn || (event && event.currentTarget);
+    if (!target) return false;
+
+    const downloadUrl = target.getAttribute('href') || '/download/windows';
+    const cacheBuster = (downloadUrl.indexOf('?') === -1 ? '?' : '&') + 't=' + Date.now();
+
+    setDownloadButtonState(target, 'isDownloading', 'Initializing...');
+
+    try {
+      const headResponse = await fetch(downloadUrl, {
+        method: 'HEAD',
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+
+      if (!headResponse.ok) {
+        throw new Error('Download route returned ' + headResponse.status);
+      }
+
+      ensureDownloadFrame().src = downloadUrl + cacheBuster;
+      setDownloadButtonState(target, 'hasCompleted', '✅ Download Started');
+      resetDownloadButtonState(target, 4500);
+    } catch (error) {
+      console.error('Windows download failed', error);
+      setDownloadButtonState(target, 'errorState', '⚠️ Download Failed');
+      resetDownloadButtonState(target, 5000);
+    }
+
+    return false;
+  }
+
 </script>
 </body>
 </html>
