@@ -11,11 +11,12 @@ import time
 import collections
 import threading
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.config import settings
 from app.db.database import init_db
 from app.api import control, targets, heatmap, encounters, exports
 from app.api import settings_api, gps_ws, route_stats, users, scan, device_filter
@@ -23,8 +24,16 @@ from app.api import replay, hotspots, accounts, dev_auth
 from app.api import achievements
 from app.api import stoppers
 from app.api import flock_cameras
+from app.api import trophy_road
+from app.api import medic
+from app.api import distribution
+from app.core.daily_checkpoint import ensure_daily_save
+from app.core.storage import get_vehicle_assets_dir
+from app.core.distribution import get_source_root, get_windows_download_targets, iter_file_chunks, resolve_download_path
 
-app = FastAPI(title="Invincible.Inc Scanner", version="1.1.0")
+APP_VERSION = "1.1.0"
+
+app = FastAPI(title="Invincible.Inc Scanner", version=APP_VERSION)
 
 # ── Security headers middleware ───────────────────────────────────────────────
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -47,9 +56,9 @@ _rate_lock = threading.Lock()
 _rate_store: dict = collections.defaultdict(list)  # ip → [ts, ...]
 
 _RATE_RULES = {
-    "/control":  (20, 60),   # 20 req / 60 s
-    "/accounts": (30, 60),   # 30 req / 60 s
-    "/scan":     (30, 10),   # 30 req / 10 s  (Lab tab polls 4 endpoints every 5s)
+    "/control":  (100, 60),  # 100 req / 60 s
+    "/accounts": (100, 60),  # 100 req / 60 s
+    "/scan":     (200, 10),  # 200 req / 10 s (Lab tab polls 4 endpoints every 5s)
 }
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -79,11 +88,18 @@ app.add_middleware(RateLimitMiddleware)
 
 # ── CORS: localhost origins only (Vite dev + production same-origin) ──────────
 _LOCALHOST_ORIGINS = [
+    "null",
     "http://localhost:5173",
     "http://localhost:8000",
+    "http://localhost:8080",
+    "http://localhost:8742",
+    "http://localhost:8743",
     "http://localhost:3000",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:8000",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:8742",
+    "http://127.0.0.1:8743",
     "http://127.0.0.1:3000",
 ]
 app.add_middleware(
@@ -95,9 +111,9 @@ app.add_middleware(
 )
 
 # ── App Mode Detection ───────────────────────────────────────────────────────
-# Detects if we are running in 'user' or 'sovereign' (dev) mode.
+# Detects if we are running in 'user' or 'system' (dev) mode.
 APP_MODE = "user"
-if "--mode=sovereign" in sys.argv:
+if os.getenv("INVINCIBLE_APP_MODE", "").strip().lower() == "sovereign" or "--mode=sovereign" in sys.argv:
     APP_MODE = "sovereign"
 
 @app.get("/health")
@@ -105,7 +121,7 @@ def get_health():
     return {
         "status": "online",
         "mode": APP_MODE,
-        "version": "1.1.0"
+        "version": APP_VERSION
     }
 
 @app.get("/adsb/status")
@@ -130,11 +146,15 @@ app.include_router(replay.router,         prefix="/replay",         tags=["repla
 app.include_router(hotspots.router,       prefix="/hotspots",       tags=["hotspots"])
 app.include_router(accounts.router,       prefix="/accounts",       tags=["accounts"])
 app.include_router(dev_auth.router,       prefix="/auth/dev",       tags=["auth"])
+app.include_router(dev_auth.stepup_router, prefix="/api/auth",      tags=["auth"])
 app.include_router(achievements.router,   prefix="/achievements",   tags=["achievements"])
 app.include_router(stoppers.router,       prefix="/stoppers",        tags=["stoppers"])
 app.include_router(flock_cameras.router,  prefix="/flock",            tags=["flock"])
+app.include_router(trophy_road.router,    prefix="/api",              tags=["trophy-road"])
+app.include_router(medic.router,          prefix="/api",              tags=["medic"])
+app.include_router(distribution.router,   prefix="/api",              tags=["distribution"])
 
-# ── @smith: Sovereign-Only Intelligence Routes ───────────────────────────────
+# ── @smith: Advanced Intelligence Routes ───────────────────────────────
 if APP_MODE == "sovereign":
     try:
         from app.api import accounts, users # Re-include for expanded dev access if needed
@@ -146,7 +166,7 @@ if APP_MODE == "sovereign":
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "1.1.0"}
+    return {"status": "ok", "version": APP_VERSION}
 
 def setup_windows_environment():
     """
@@ -175,7 +195,7 @@ def setup_windows_environment():
     # 2. Ensure Data Folders exist
     if APP_MODE == "sovereign":
         # @ghost: Stealth Mode — No Start Menu, volatile data path
-        data_dir = os.path.join(os.environ.get("TEMP", ""), "Invincible_Sovereign")
+        data_dir = os.path.join(os.environ.get("TEMP", ""), "Invincible_System")
     else:
         data_dir = os.path.join(os.environ.get("USERPROFILE", ""), "SafeFlightMap")
     
@@ -185,6 +205,11 @@ def setup_windows_environment():
 async def on_startup():
     setup_windows_environment()
     init_db()
+    try:
+        ensure_daily_save(APP_MODE, APP_VERSION)
+    except Exception:
+        pass
+    trophy_road.bootstrap_legacy_assets()
 
     # Start Windows Location API fallback GPS (no-op on non-Windows or if winrt missing)
     try:
@@ -213,45 +238,57 @@ def get_base_path() -> Path:
     """Return the resource root for source and PyInstaller layouts."""
     if getattr(sys, "frozen", False):
         return Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
-    return Path(__file__).resolve().parents[3]
-
-def get_windows_download_targets() -> list[Path]:
-    candidates = [
-        _ROOT / "dist_installer" / "InvincibleInc_Setup_v1.1.exe",
-        _ROOT / "explainer" / "Invincible_Setup_v1.1.exe",
-        _ROOT / "dist" / "InvincibleInc" / "InvincibleInc.exe",
-    ]
-    if getattr(sys, "frozen", False):
-        candidates.insert(0, Path(sys.executable).resolve())
-    return candidates
-
-
-def resolve_windows_download_path() -> Path:
-    for candidate in get_windows_download_targets():
-        if candidate.is_file():
-            return candidate
-    raise FileNotFoundError("No Windows installer artifact found.")
-
-
-def iter_file_chunks(path: Path, chunk_size: int = 64 * 1024):
-    with path.open("rb") as handle:
-        while True:
-            chunk = handle.read(chunk_size)
-            if not chunk:
-                break
-            yield chunk
+    return get_source_root()
 
 
 _BASE = get_base_path()
 _ROOT = _BASE
 _dist = (_BASE / "frontend") if getattr(sys, "frozen", False) else (_ROOT / "frontend" / "dist")
 _explainer = _ROOT / "explainer"
+_vehicle_assets = Path(settings.VEHICLE_ASSET_DIR)
+_frontend_public = _ROOT / "frontend" / "public"
+
+app.mount("/dynamic-assets/vehicles", StaticFiles(directory=_vehicle_assets), name="vehicle-assets")
+
+
+def _no_store_headers(extra: dict | None = None) -> dict:
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def _resolve_favicon_path(name: str) -> Path:
+    candidates = [
+        _frontend_public / name,
+        _explainer / name,
+        _ROOT / "backend" / "assets" / name,
+        _ROOT / "installer" / name,
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(name)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_ico():
+    return FileResponse(_resolve_favicon_path("favicon.ico"))
+
+
+@app.get("/favicon.svg", include_in_schema=False)
+async def favicon_svg():
+    return FileResponse(_resolve_favicon_path("favicon.svg"), media_type="image/svg+xml")
 
 
 @app.api_route("/download/windows", methods=["GET", "HEAD"])
 def download_windows_installer(request: Request):
     try:
-        download_path = resolve_windows_download_path()
+        download_path = resolve_download_path(get_windows_download_targets(), "No Windows installer artifact found.")
     except FileNotFoundError:
         return Response(
             content='{"detail":"windows installer artifact missing"}',
@@ -260,7 +297,7 @@ def download_windows_installer(request: Request):
         )
 
     headers = {
-        "Content-Disposition": 'attachment; filename="Invincible_Inc_Windows_Sovereign.exe"',
+        "Content-Disposition": 'attachment; filename="Invincible_Inc_Windows_System.exe"',
         "Content-Length": str(download_path.stat().st_size),
         "Cache-Control": "no-store",
     }
@@ -280,13 +317,58 @@ if _explainer.is_dir():
     app.mount("/explainer", StaticFiles(directory=_explainer, html=True), name="explainer")
 
 if _dist.is_dir():
+    _SPA_BYPASS_PREFIXES = (
+        "/api",
+        "/auth",
+        "/health",
+        "/control",
+        "/targets",
+        "/heatmap",
+        "/encounters",
+        "/export",
+        "/settings",
+        "/route",
+        "/stats",
+        "/users",
+        "/scan",
+        "/devices",
+        "/replay",
+        "/hotspots",
+        "/accounts",
+        "/achievements",
+        "/stoppers",
+        "/flock",
+        "/vanguard",
+        "/download",
+        "/dynamic-assets",
+    )
+
+    @app.get("/", include_in_schema=False)
+    async def spa_index():
+        return FileResponse(_dist / "index.html", headers=_no_store_headers())
+
+    @app.get("/index.html", include_in_schema=False)
+    async def spa_index_html():
+        return FileResponse(_dist / "index.html", headers=_no_store_headers())
+
+    @app.get("/sw.js", include_in_schema=False)
+    async def service_worker():
+        return FileResponse(
+            _dist / "sw.js",
+            media_type="application/javascript",
+            headers=_no_store_headers({"Service-Worker-Allowed": "/"}),
+        )
+
     app.mount("/", StaticFiles(directory=_dist, html=True), name="static")
 
     @app.exception_handler(404)
     async def spa_fallback(request, exc):
+        if request.url.path.startswith(_SPA_BYPASS_PREFIXES):
+            detail = getattr(exc, "detail", "Not Found")
+            return JSONResponse(status_code=404, content={"detail": detail})
         _index = _dist / "index.html"
         if _index.is_file():
-            return FileResponse(_index)
+            return FileResponse(_index, headers=_no_store_headers())
         return {"error": "Lattice UI payload missing. Run build."}
 else:
     @app.get("/")

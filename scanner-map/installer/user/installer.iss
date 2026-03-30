@@ -85,7 +85,7 @@ Name: "{commondesktop}\{#AppName}";   Filename: "{app}\{#AppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#AppExeName}"; \
     Description: "Launch {#AppName}"; \
-    Flags: nowait postinstall skipifsilent
+    Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/F /IM {#AppExeName}"; \

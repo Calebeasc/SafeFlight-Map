@@ -1,13 +1,23 @@
-// Invincible.Inc Scanner — Service Worker v2
+// Invincible.Inc Scanner — Service Worker v5
 // Caches the app shell so it loads instantly and works offline.
 // API calls (fetch to /users, /encounters, etc.) always go to the network.
 
-const CACHE = 'iinc-shell-v3'
-const SHELL = ['/', '/icon.svg', '/manifest.json']
+const CACHE = 'iinc-shell-v7'
+const SHELL = [
+  '/',
+  '/index.html',
+  '/App.css',
+  '/favicon.ico',
+  '/icon.svg',
+  '/manifest.json',
+]
 
+// Install: pre-cache the shell
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then(c => c.addAll(SHELL))
+      .then(() => self.skipWaiting())
   )
 })
 
@@ -19,8 +29,28 @@ self.addEventListener('activate', e => {
   )
 })
 
+self.addEventListener('message', e => {
+  if (e.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
+})
+
 self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url)
+  // Ignore unsupported browser-internal requests that otherwise throw in SW fetch().
+  if (e.request.cache === 'only-if-cached' && e.request.mode !== 'same-origin') {
+    return
+  }
+
+  let url
+  try {
+    url = new URL(e.request.url)
+  } catch {
+    return
+  }
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    return
+  }
 
   // Let API calls go straight to network (never cache dynamic data)
   const isApi = url.pathname.startsWith('/users') ||
@@ -41,23 +71,57 @@ self.addEventListener('fetch', e => {
                 url.pathname.startsWith('/devices') ||
                 url.pathname.startsWith('/export') ||
                 url.pathname.startsWith('/stats') ||
-                url.pathname.startsWith('/health')
+                url.pathname.startsWith('/health') ||
+                url.pathname.startsWith('/auth') ||
+                url.pathname.startsWith('/api')
 
   if (isApi || e.request.method !== 'GET') {
-    e.respondWith(fetch(e.request).catch(() => new Response('', { status: 503 })))
+    e.respondWith(
+      fetch(e.request).catch(err => {
+        console.error('[SW] API fetch failed:', err)
+        return jsonServiceUnavailable()
+      }),
+    )
     return
   }
 
-  // App shell: cache-first
+  const isNavigate = e.request.mode === 'navigate'
+  if (isNavigate) {
+    e.respondWith(
+      (async () => {
+        try {
+          const res = await fetch(e.request)
+          if (res.ok) {
+            const clone = res.clone()
+            caches.open(CACHE).then(c => c.put(e.request, clone))
+          }
+          return res
+        } catch (err) {
+          console.error('[SW] Navigation fetch failed:', err)
+          const cached = await caches.match(e.request)
+          return cached || jsonServiceUnavailable()
+        }
+      })(),
+    )
+    return
+  }
+
+  // Static assets: cache-first
   e.respondWith(
     caches.match(e.request).then(cached => {
-      const network = fetch(e.request).then(res => {
-        if (res.ok) {
-          const clone = res.clone()
-          caches.open(CACHE).then(c => c.put(e.request, clone))
+      const network = (async () => {
+        try {
+          const res = await fetch(e.request)
+          if (res.ok) {
+            const clone = res.clone()
+            caches.open(CACHE).then(c => c.put(e.request, clone))
+          }
+          return res
+        } catch (err) {
+          console.error('[SW] Fetch failed:', err)
+          return jsonServiceUnavailable()
         }
-        return res
-      })
+      })()
       return cached || network
     })
   )

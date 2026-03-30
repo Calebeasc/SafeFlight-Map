@@ -3,7 +3,7 @@
 #  Run from the repo root:  .\scanner-map\scripts\build.ps1
 #
 #  Produces:
-#    scanner-map\dist\InvincibleInc\InvincibleInc.exe           (raw bundle)
+#    scanner-map\dist\InvincibleInc\InvincibleInc.exe           (raw bundle, UAC admin manifest)
 #    scanner-map\dist_installer\InvincibleInc_Setup_v1.1.exe    (installer)
 #
 #  Requirements:
@@ -33,6 +33,7 @@ $VenvDir     = Join-Path $Root '.venv'
 $Python      = if (Test-Path "$VenvDir\Scripts\python.exe") { "$VenvDir\Scripts\python.exe" } else { 'python' }
 $Pip         = if (Test-Path "$VenvDir\Scripts\pip.exe")    { "$VenvDir\Scripts\pip.exe"    } else { 'pip'    }
 $SpecPath    = Join-Path $UserAppDir 'user.spec'
+$DailyReleaseScript = Join-Path $Root 'scripts\daily_release.py'
 
 function Step($n, $total, $msg) {
     Write-Host "`n[$n/$total] $msg" -ForegroundColor Yellow
@@ -58,6 +59,10 @@ if ($SkipInstaller) { $TotalSteps = 4 }
 Write-Host "`n══════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host "  Invincible.Inc Builder  v1.1" -ForegroundColor Cyan
 Write-Host "══════════════════════════════════════════`n" -ForegroundColor Cyan
+
+if (Test-Path $DailyReleaseScript) {
+    & $Python $DailyReleaseScript
+}
 
 # ── 1. React frontend ─────────────────────────────────────────────────────────
 Step 1 $TotalSteps 'Building React frontend...'
@@ -120,7 +125,7 @@ $ExePath = "$Root\dist\InvincibleInc\InvincibleInc.exe"
 if (-not (Test-Path $ExePath)) { Fail "PyInstaller did not produce InvincibleInc.exe" }
 Repair-PyInstallerLayout "$Root\dist\InvincibleInc"
 $ExeSize = [math]::Round((Get-Item $ExePath).Length / 1MB, 1)
-OK "InvincibleInc.exe built ($ExeSize MB)."
+OK "InvincibleInc.exe built ($ExeSize MB) with requireAdministrator manifest."
 
 # ── 5. Inno Setup installer ──────────────────────────────────────────────────
 if (-not $SkipInstaller) {

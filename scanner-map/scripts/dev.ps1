@@ -2,8 +2,13 @@
 # Run from the repo root: .\scripts\dev.ps1
 
 $Root = Split-Path $PSScriptRoot -Parent
+$Python = if (Test-Path "$Root\.venv\Scripts\python.exe") { "$Root\.venv\Scripts\python.exe" } else { "python" }
 
 Write-Host "Starting SafeFlight Map in DEV mode..." -ForegroundColor Cyan
+
+if (Test-Path "$Root\scripts\daily_release.py") {
+    & $Python "$Root\scripts\daily_release.py"
+}
 
 # Terminal 1: FastAPI backend
 Start-Process powershell -ArgumentList @(
