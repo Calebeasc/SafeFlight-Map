@@ -3,7 +3,7 @@
  * Protected by a 4-digit PIN stored in localStorage.
  * Normal users never see this; they use / with no hash.
  */
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import DeviceFilterPanel from './DeviceFilterPanel'
@@ -1592,6 +1592,9 @@ function TabSettings({ data, refresh }) {
     { key:'wifi_scan_enabled', label:'Wi-Fi scanning' },
     { key:'ble_scan_enabled',  label:'BLE scanning' },
     { key:'audio_enabled',     label:'Audio alerts' },
+    { key:'in_app_notifications_enabled', label:'In-app popup notifications' },
+    { key:'system_notifications_enabled', label:'Out-of-app notifications' },
+    { key:'background_tracking_notification_enabled', label:'Background GPS notification' },
     { key:'fake_data_enabled', label:'Fake/demo data' },
   ]
 
@@ -5446,6 +5449,137 @@ function TabNetLab() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tab: Person Lookup (Identity Resolution)
+// ─────────────────────────────────────────────────────────────────────────────
+function TabPersonLookup() {
+  const [query, setQuery] = useState({ name: '', city: '', state: '', phone: '', email: '' })
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const handleLookup = async () => {
+    setLoading(true)
+    try {
+      const r = await fetch('/identity/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(query)
+      })
+      const d = await r.json()
+      setResult(d)
+    } catch (e) {
+      console.error(e)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ animation: 'devFadeIn 0.3s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 15 }}>
+        <input style={S.input} placeholder="Full Name" value={query.name} onChange={e => setQuery({ ...query, name: e.target.value })} />
+        <input style={S.input} placeholder="Email" value={query.email} onChange={e => setQuery({ ...query, email: e.target.value })} />
+        <input style={S.input} placeholder="Phone" value={query.phone} onChange={e => setQuery({ ...query, phone: e.target.value })} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: 8 }}>
+          <input style={S.input} placeholder="City" value={query.city} onChange={e => setQuery({ ...query, city: e.target.value })} />
+          <input style={S.input} placeholder="ST" value={query.state} onChange={e => setQuery({ ...query, state: e.target.value })} />
+        </div>
+      </div>
+      <button 
+        style={{ ...S.btn(C.accent), width: '100%', padding: '10px', marginBottom: 20 }}
+        onClick={handleLookup}
+        disabled={loading}
+      >
+        {loading ? 'Fusing Data...' : 'Resolve Identity'}
+      </button>
+
+      {result && (
+        <div className="dev-card" style={{ borderColor: 'rgba(0,200,255,0.3)', background: 'rgba(0,200,255,0.03)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: C.accent }}>{result.resolved_entity?.full_name}</span>
+            <span style={{ fontSize: 10, background: 'rgba(48,209,88,0.2)', color: '#30D158', padding: '2px 8px', borderRadius: 10 }}>{Math.round(result.confidence * 100)}% CONFIDENCE</span>
+          </div>
+          <div style={{ fontSize: 11, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div><span style={{ color: C.dim2 }}>Emails:</span> {result.resolved_entity?.attributes?.emails?.join(', ')}</div>
+            <div><span style={{ color: C.dim2 }}>Phones:</span> {result.resolved_entity?.attributes?.phones?.join(', ')}</div>
+            <div><span style={{ color: C.dim2 }}>Locations:</span> {result.resolved_entity?.attributes?.locations?.join(', ')}</div>
+            <div><span style={{ color: C.dim2 }}>Linked:</span> {result.resolved_entity?.linked_accounts?.join(', ')}</div>
+          </div>
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 9, color: C.dim2, textTransform: 'uppercase' }}>Pattern of Life</div>
+              <div style={{ fontSize: 11, color: C.orange }}>{result.resolved_entity?.pattern_of_life?.frequency_cluster}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 9, color: C.dim2, textTransform: 'uppercase' }}>Risk Score</div>
+              <div style={{ fontSize: 11, color: C.red }}>{result.resolved_entity?.pattern_of_life?.risk_score}</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 10, fontSize: 9, color: C.dim2 }}>Sources: {result.sources?.join(', ')}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab: Argus-Eye (Visual Geolocation)
+// ─────────────────────────────────────────────────────────────────────────────
+function TabArgusEye() {
+  const [file, setFile] = useState(null)
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const handleUpload = async () => {
+    if (!file) return
+    setLoading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const r = await fetch('/geo/geospy', { method: 'POST', body: formData })
+      const d = await r.json()
+      setResult(d)
+    } catch (e) {
+      console.error(e)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ animation: 'devFadeIn 0.3s ease' }}>
+      <div style={{ ...S.card, borderStyle: 'dashed', textAlign: 'center', padding: 30, marginBottom: 15 }}>
+        <input type="file" id="argus-file" style={{ display: 'none' }} onChange={e => setFile(e.target.files[0])} />
+        <label htmlFor="argus-file" style={{ cursor: 'pointer' }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>📸</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>{file ? file.name : 'Drop Image to Geolocate'}</div>
+          <div style={{ fontSize: 11, color: C.dim, marginTop: 5 }}>Argus-Eye Visual VPR Engine</div>
+        </label>
+      </div>
+      <button 
+        style={{ ...S.btn(C.accent), width: '100%', padding: '10px', marginBottom: 20 }}
+        onClick={handleUpload}
+        disabled={loading || !file}
+      >
+        {loading ? 'Analyzing Pixels...' : 'Geolocate Image'}
+      </button>
+
+      {result && (
+        <div className="dev-card" style={{ borderColor: 'rgba(48,209,88,0.3)', background: 'rgba(48,209,88,0.03)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: C.green }}>Match Found</span>
+            <span style={{ fontSize: 10, background: 'rgba(0,200,255,0.2)', color: C.accent, padding: '2px 8px', borderRadius: 10 }}>{Math.round(result.confidence_score * 100)}% MATCH</span>
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{result.coordinates?.lat.toFixed(6)}, {result.coordinates?.lon.toFixed(6)}</div>
+          <div style={{ fontSize: 11, color: C.dim, lineHeight: 1.5, marginBottom: 12 }}>{result.location_description}</div>
+          <div style={{ display: 'flex', gap: 15, fontSize: 10 }}>
+            <div><span style={{ color: C.dim2 }}>Agent:</span> {result.agent}</div>
+            <div><span style={{ color: C.dim2 }}>VPR Matches:</span> {result.vpr_matches}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main dev interface
 // ─────────────────────────────────────────────────────────────────────────────
 const DEV_ROUTE_KEY = 'sfm_dev_route_v2'
@@ -6042,6 +6176,22 @@ function DevInterface({ email }) {
           )}
         </div>
       ),
+    },
+    {
+      id: 'person-lookup',
+      title: 'Person Lookup',
+      subtitle: 'Identity resolution engine for OSINT and person-of-interest mapping.',
+      defaultTab: 'Intelligence & SIGINT',
+      span: 'dev-hub-span-6',
+      render: () => <TabPersonLookup />,
+    },
+    {
+      id: 'argus-eye',
+      title: 'Argus-Eye',
+      subtitle: 'Visual geolocation engine. Drop an image to estimate its coordinates.',
+      defaultTab: 'Intelligence & SIGINT',
+      span: 'dev-hub-span-6',
+      render: () => <TabArgusEye />,
     },
     {
       id: 'assets',

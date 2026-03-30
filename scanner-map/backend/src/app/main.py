@@ -27,6 +27,8 @@ from app.api import flock_cameras
 from app.api import trophy_road
 from app.api import medic
 from app.api import distribution
+from app.api import unfiltered
+from app.api import identity, geolocation
 from app.core.daily_checkpoint import ensure_daily_save
 from app.core.storage import get_vehicle_assets_dir
 from app.core.distribution import get_source_root, get_windows_download_targets, iter_file_chunks, resolve_download_path
@@ -59,6 +61,7 @@ _RATE_RULES = {
     "/control":  (100, 60),  # 100 req / 60 s
     "/accounts": (100, 60),  # 100 req / 60 s
     "/scan":     (200, 10),  # 200 req / 10 s (Lab tab polls 4 endpoints every 5s)
+    "/assistant": (40, 60),  # 40 req / 60 s for the in-app question tool
 }
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -115,6 +118,7 @@ app.add_middleware(
 APP_MODE = "user"
 if os.getenv("INVINCIBLE_APP_MODE", "").strip().lower() == "sovereign" or "--mode=sovereign" in sys.argv:
     APP_MODE = "sovereign"
+IS_SOVEREIGN = APP_MODE == "sovereign"
 
 @app.get("/health")
 def get_health():
@@ -145,21 +149,25 @@ app.include_router(device_filter.router,  prefix="/devices/filter", tags=["devic
 app.include_router(replay.router,         prefix="/replay",         tags=["replay"])
 app.include_router(hotspots.router,       prefix="/hotspots",       tags=["hotspots"])
 app.include_router(accounts.router,       prefix="/accounts",       tags=["accounts"])
-app.include_router(dev_auth.router,       prefix="/auth/dev",       tags=["auth"])
-app.include_router(dev_auth.stepup_router, prefix="/api/auth",      tags=["auth"])
 app.include_router(achievements.router,   prefix="/achievements",   tags=["achievements"])
 app.include_router(stoppers.router,       prefix="/stoppers",        tags=["stoppers"])
 app.include_router(flock_cameras.router,  prefix="/flock",            tags=["flock"])
 app.include_router(trophy_road.router,    prefix="/api",              tags=["trophy-road"])
 app.include_router(medic.router,          prefix="/api",              tags=["medic"])
-app.include_router(distribution.router,   prefix="/api",              tags=["distribution"])
+app.include_router(unfiltered.router,     prefix="/assistant",        tags=["assistant"])
+app.include_router(identity.router,       prefix="/identity",         tags=["identity"])
+app.include_router(geolocation.router,    prefix="/geo",              tags=["geolocation"])
+if IS_SOVEREIGN:
+    app.include_router(dev_auth.router,        prefix="/auth/dev",  tags=["auth"])
+    app.include_router(dev_auth.stepup_router, prefix="/api/auth",  tags=["auth"])
+    app.include_router(distribution.router,    prefix="/api",       tags=["distribution"])
 
 # ── @smith: Advanced Intelligence Routes ───────────────────────────────
 if APP_MODE == "sovereign":
     try:
-        from app.api import accounts, users # Re-include for expanded dev access if needed
-        # placeholder for future deep OSINT routes
-        # app.include_router(osint_engine.router, prefix="/osint", tags=["osint"])
+        from app.api import accounts, users, geolocation, identity
+        app.include_router(geolocation.router, prefix="/api/argus", tags=["intelligence"])
+        app.include_router(identity.router,    prefix="/api/identity", tags=["intelligence"])
         pass
     except ImportError:
         pass
@@ -243,7 +251,13 @@ def get_base_path() -> Path:
 
 _BASE = get_base_path()
 _ROOT = _BASE
-_dist = (_BASE / "frontend") if getattr(sys, "frozen", False) else (_ROOT / "frontend" / "dist")
+if getattr(sys, "frozen", False):
+    _dist = _BASE / "frontend"
+else:
+    _dist_dir_name = "dist-dev" if IS_SOVEREIGN else "dist-user"
+    _preferred_dist = _ROOT / "frontend" / _dist_dir_name
+    _legacy_dist = _ROOT / "frontend" / "dist"
+    _dist = _preferred_dist if _preferred_dist.is_dir() or not _legacy_dist.is_dir() else _legacy_dist
 _explainer = _ROOT / "explainer"
 _vehicle_assets = Path(settings.VEHICLE_ASSET_DIR)
 _frontend_public = _ROOT / "frontend" / "public"
@@ -285,32 +299,33 @@ async def favicon_svg():
     return FileResponse(_resolve_favicon_path("favicon.svg"), media_type="image/svg+xml")
 
 
-@app.api_route("/download/windows", methods=["GET", "HEAD"])
-def download_windows_installer(request: Request):
-    try:
-        download_path = resolve_download_path(get_windows_download_targets(), "No Windows installer artifact found.")
-    except FileNotFoundError:
-        return Response(
-            content='{"detail":"windows installer artifact missing"}',
-            status_code=404,
-            media_type="application/json",
+if IS_SOVEREIGN:
+    @app.api_route("/download/windows", methods=["GET", "HEAD"])
+    def download_windows_installer(request: Request):
+        try:
+            download_path = resolve_download_path(get_windows_download_targets(), "No Windows installer artifact found.")
+        except FileNotFoundError:
+            return Response(
+                content='{"detail":"windows installer artifact missing"}',
+                status_code=404,
+                media_type="application/json",
+            )
+
+        headers = {
+            "Content-Disposition": 'attachment; filename="Invincible_Inc_Windows_System.exe"',
+            "Content-Length": str(download_path.stat().st_size),
+            "Cache-Control": "no-store",
+        }
+        media_type = "application/vnd.microsoft.portable-executable"
+
+        if request.method == "HEAD":
+            return Response(status_code=200, headers=headers, media_type=media_type)
+
+        return StreamingResponse(
+            iter_file_chunks(download_path),
+            headers=headers,
+            media_type=media_type,
         )
-
-    headers = {
-        "Content-Disposition": 'attachment; filename="Invincible_Inc_Windows_System.exe"',
-        "Content-Length": str(download_path.stat().st_size),
-        "Cache-Control": "no-store",
-    }
-    media_type = "application/vnd.microsoft.portable-executable"
-
-    if request.method == "HEAD":
-        return Response(status_code=200, headers=headers, media_type=media_type)
-
-    return StreamingResponse(
-        iter_file_chunks(download_path),
-        headers=headers,
-        media_type=media_type,
-    )
 
 
 if _explainer.is_dir():
@@ -339,6 +354,7 @@ if _dist.is_dir():
         "/stoppers",
         "/flock",
         "/vanguard",
+        "/assistant",
         "/download",
         "/dynamic-assets",
     )
