@@ -3,7 +3,7 @@
 
 $Root = Split-Path $PSScriptRoot -Parent
 
-Write-Host "Starting SafeFlight Map in DEV mode..." -ForegroundColor Cyan
+Write-Host "Starting Invincible.Inc in DEV mode..." -ForegroundColor Cyan
 
 # Terminal 1: FastAPI backend
 Start-Process powershell -ArgumentList @(

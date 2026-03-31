@@ -1,6 +1,6 @@
-# build.ps1 – SafeFlight Map build script
+# build.ps1 – Invincible.Inc build script
 # Run from the repo root: .\scripts\build.ps1
-# Produces: dist\scanner-map.exe
+# Produces: dist\Invincible.exe
 
 param(
     [switch]$SkipFrontend,
@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $Root = Split-Path $PSScriptRoot -Parent
 
-Write-Host "`n=== SafeFlight Map Builder ===" -ForegroundColor Cyan
+Write-Host "`n=== Invincible.Inc Builder ===" -ForegroundColor Cyan
 
 # ── 1. Build React frontend ───────────────────────────────────────────────────
 if (-not $SkipFrontend) {
@@ -58,7 +58,7 @@ $AddPaths     = $BackendSrc
 & $Python -m PyInstaller `
     --onefile `
     --noconsole `
-    --name "scanner-map" `
+    --name "Invincible" `
     --distpath $OutDir `
     --workpath "$Root\build\pyinstaller" `
     --specpath "$Root\build" `
@@ -77,8 +77,8 @@ $AddPaths     = $BackendSrc
     --hidden-import "app.core.allowlist" `
     $Launcher
 
-if (-not (Test-Path "$OutDir\scanner-map.exe")) {
-    Write-Error "PyInstaller did not produce scanner-map.exe"
+if (-not (Test-Path "$OutDir\Invincible.exe")) {
+    Write-Error "PyInstaller did not produce Invincible.exe"
 }
 
 # ── 4. Copy targets template ─────────────────────────────────────────────────
@@ -86,5 +86,5 @@ Write-Host "`n[4/4] Copying assets..." -ForegroundColor Yellow
 Copy-Item "$Root\targets.example.json" "$OutDir\targets.example.json" -Force
 
 Write-Host "`n=== BUILD COMPLETE ===" -ForegroundColor Cyan
-Write-Host "Executable: $OutDir\scanner-map.exe" -ForegroundColor Green
-Write-Host "Copy targets.example.json to %USERPROFILE%\SafeFlightMap\targets.json and edit it."
+Write-Host "Executable: $OutDir\Invincible.exe" -ForegroundColor Green
+Write-Host "Copy targets.example.json to %USERPROFILE%\Invincible\targets.json and edit it."

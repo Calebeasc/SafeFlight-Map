@@ -65,6 +65,48 @@ Agents responsible for high-level coordination, mission planning, and maintainin
  
 <br/>
  
+### **Leviathan** | `@leviathan`
+- **Purpose:** Mass Surveillance Lead
+- **Full Description:** The ultimate oversight authority. Specializes in nation-state tier mass surveillance strategies, including billion-scale biometric vector search (Clearview style), graph-based link analysis (Palantir style), and zero-click remote interdiction (NSO style).
+- **Calling / Interface:** `@leviathan`
+ 
+<br/>
+ 
+### **Ouroboros** | `@ouroboros`
+- **Purpose:** Blockchain Forensics
+- **Full Description:** The master of digital asset attribution. Specializes in de-anonymizing the blockchain using cluster heuristics (Common Spend), attribution logic (Glass Box), and cross-chain transaction tracing (Chainalysis style). Tracks illicit fund flows from darknet markets to regulated exchanges.
+- **Calling / Interface:** `@ouroboros`
+ 
+<br/>
+ 
+### **Spectral** | `@spectral`
+- **Purpose:** Signal Intelligence (SIGINT)
+- **Full Description:** The master of RF fingerprinting. Specializes in automated signal classification (modulation/protocol detection) and "RF DNA" emitter fingerprinting. Identifies transmitters based on physical-layer hardware artifacts, enabling tracking of radios even when digital IDs are changed or encrypted.
+- **Calling / Interface:** `@spectral`
+ 
+<br/>
+ 
+### **Censys** | `@censys`
+- **Purpose:** Attack Surface Management (EASM)
+- **Full Description:** The master of external reconnaissance. Specializes in automated asset discovery (subdomains, cloud buckets, ASN mapping) and service fingerprinting. Cross-references discovered infrastructure against zero-day CVEs and credential leak logs to identify vulnerable entry points.
+- **Calling / Interface:** `@censys`
+ 
+<br/>
+ 
+### **Mandiant** | `@mandiant`
+- **Purpose:** Malware Analysis
+- **Full Description:** The master of binary dissection. Specializes in automated sandboxing and reverse-engineering of obfuscated malware. Analyzes dynamic behavior (API calls, network traffic) to identify zero-day exploits and attribute malicious activity to specific threat actors (APTs).
+- **Calling / Interface:** `@mandiant`
+ 
+<br/>
+ 
+### **TLO** | `@tlo`
+- **Purpose:** Background Triage
+- **Full Description:** The master of public record aggregation. Specializes in triaging disparate data points from property deeds, court filings, and voter registries (LexisNexis/TLO style). Maps address histories, owned assets, and high-probability associations to provide a comprehensive physical-world dossier.
+- **Calling / Interface:** `@tlo`
+ 
+<br/>
+ 
 ---
  
 ## 3. SYSTEM ADMIN TOOLKIT (THE MAD SCIENTISTS)
@@ -304,3 +346,28 @@ Specific locations in the **Invincible.Inc** dashboard where agent logic is trig
 - **Vanguard Dashboard (`VanguardDashboard.jsx`):** Web reconnaissance suite designed by `@anderton`.
 - **Sentinel Server (`sentinel_server.py`):** The background heartbeat monitor managed by `@sentinel` and `@argus`.
 - **Trophy Road (`TrophyRoadTrack.jsx`):** Progression and asset unlocking logic audited by `@aether` and `@scholar`.
+ 
+<br/>
+ 
+---
+ 
+## 7. AUTOMATION & IGNITION (THE BOOTSTRAPPERS)
+Protocols and scripts responsible for system-wide initialization and background intelligence.
+ 
+### **Sovereign Ignition** | `Invincible/ColdStart.ps1` (v3.0)
+- **Purpose:** Full Multi-Tab System Initialization
+- **Capabilities:**
+  - **Dynamic Mode Parity:** Supports `user` and `sovereign` startup modes.
+  - **Console Orchestration:** Launches a 6-tab Windows Terminal (`wt.exe`) for Sentinel, ngrok, Backend, Frontend Watcher, Lattice Monitor, and Shell.
+  - **Dependency Hardening:** Automatically syncs Python (`bleak`, `pystray`, `PIL`) and Node dependencies.
+  - **Secure Link:** Manages Twingate Docker Connector state.
+ 
+<br/>
+ 
+### **Lattice Monitor** | `LATTICE_MONITOR.ps1`
+- **Purpose:** Background Intelligence & Automation Loop
+- **Capabilities:**
+  - **Link Sync (@link):** Polling `DEVDRAFT.md` every 5 minutes for new developer instructions.
+  - **Scout Research (@scout):** Executing 24-hour intelligence intake for mass surveillance trends.
+  - **Command Bridge:** Pipes instructions directly to the @alfred bridge for fleet execution.
+

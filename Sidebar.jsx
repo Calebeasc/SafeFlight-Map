@@ -23,7 +23,7 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <h1>SafeFlight Map</h1>
+        <h1>Invincible.Inc</h1>
         <p>Authorized target scanner</p>
       </div>
 

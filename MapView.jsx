@@ -46,15 +46,22 @@ export default function MapView({ heatCells, encounters, showMarkers }) {
 
       // Force correct size after mount
       setTimeout(() => {
-        map.invalidateSize()
+        if (mapRef.current) map.invalidateSize()
       }, 100)
 
       // Also handle window resize
-      window.addEventListener('resize', () => map.invalidateSize())
+      const resizeHandler = () => {
+        if (mapRef.current) map.invalidateSize()
+      }
+      window.addEventListener('resize', resizeHandler)
+      map._invincible_resize_handler = resizeHandler
     })
 
     return () => {
       if (mapRef.current) {
+        if (mapRef.current._invincible_resize_handler) {
+          window.removeEventListener('resize', mapRef.current._invincible_resize_handler)
+        }
         mapRef.current.remove()
         mapRef.current = null
       }

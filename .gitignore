@@ -38,3 +38,4 @@ scanner-map/.claude/settings.local.json
 
 # Duplicate bare gitignore file
 gitignore
+.aider*
