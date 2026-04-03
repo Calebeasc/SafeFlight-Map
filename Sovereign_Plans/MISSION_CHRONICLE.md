@@ -741,3 +741,15 @@ Restart the Twingate Client app in the system tray and connect to the `invincibl
 4. **Native Rollback:** Extended `Pages/Omni/DownloadPage.xaml` and `Pages/Omni/DownloadPage.xaml.cs` with `DOWNLOAD AND APPLY` and `REVERT TO LAST SNAPSHOT`, while preserving the manual ticketed handoff path.
 5. **Reference Refresh:** Confirmed additional active Omni guidance from `Sovereign_Plans/FUTURE_PLAN_MAP.md`, `Sovereign_Plans/CCTV_GODVIEW_INTEL.md`, `Sovereign_Plans/OMNI_SYSTEM_OF_ACTION.md`, `Sovereign_Plans/ROADMAP.md`, and `Sovereign_Plans/PALANTIR_GIS_INTEL.md` alongside the handwritten prompt and the previously active Omni blueprint files.
 **Verification:** `dotnet build Omni-repo/Invincible.Native/Invincible.App/Invincible.App.csproj` passed with `0 warnings` and `0 errors`; `npm.cmd run build` passed in `Omni-repo/portal`; `python -m py_compile` passed for `Omni-repo/backend/src/app/api/distribution.py` and `Omni-repo/backend/src/app/core/distribution.py`.
+
+### @Scholar | [VERIFIED] | 07:18
+**Raw Request:** "ensure that it is possible to navigate through the omni index front website to the logged in page to the windows download button and ensure that it works."
+**AI Interpretation:** The public Omni marketing site still had to complete the same authenticated Windows delivery path as the portal. The static signed-in operator console needed to stop hardcoding the legacy secure package lane and use the live build manifest so the website flow reaches the current native package.
+**Summary:** Aligned the static `/sites/omni` login-to-download path with the manifest-driven Omni Windows delivery chain and verified the route sequence against the backend.
+**Outcome:**
+1. Updated the mounted static operator console at `Omni/omni-site/admin/index.html` so the signed-in `Download Omni for Windows` action now resolves `/api/dist/status`, prefers `omni-native-build`, then `secure-dev-build`, then `windows-build`.
+2. Added a visible `TARGET` note to the static operator console so the currently resolved Windows artifact is exposed before download is initiated.
+3. Preserved the existing T-2+ login gate and ticketed delivery model while removing the stale hardcoded route assumption from the static operator path.
+4. Mirrored the same admin-page manifest logic into `Omni-repo/site/admin/index.html` so the GitHub clone and the mounted local Omni website do not drift.
+5. Verified the public-site chain in-process: landing page link, login route, developer auth, distribution manifest resolution, ticket issuance, and HEAD access to the selected native artifact route.
+**Verification:** In-process FastAPI smoke checks confirmed `/sites/omni/`, `/sites/omni/login/`, `/auth/dev/login`, `/api/dist/status`, `/api/dev/generate-download-ticket`, and the preferred native download route now line up for the static website flow.

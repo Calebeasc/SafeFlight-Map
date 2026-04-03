@@ -74,8 +74,10 @@ The environment is now ready for autonomous research and execution. Omni continu
 
 ### Omni Web State
 - `Omni-repo/portal` is the active operator website for Omni module access.
+- `Omni/omni-site` is the mounted public-facing Omni front website served at `/sites/omni`, with the signed-in operator console at `/sites/omni/admin/`.
 - `portal/src/pages/Temporal.tsx` is live through `portal/src/App.tsx` and the authenticated sidebar.
 - `portal/src/pages/Distribution.tsx` now exposes an authenticated `Download for Windows` control for signed-in T-2+ operators, matching the old explainer's secure ticket flow without adding a public distribution surface.
+- `Omni/omni-site/admin/index.html` now uses the same backend manifest ordering as the portal for the signed-in Windows button: `omni-native-build` -> `secure-dev-build` -> `windows-build`.
 
 ### Omni Native State
 - The WinUI shell remains `Omni-repo/Invincible.Native/Invincible.App/OmniWindow.xaml`.
@@ -92,6 +94,7 @@ The environment is now ready for autonomous research and execution. Omni continu
 - Current verified secure artifact: `C:\Users\eckel\AppData\Local\Invincible.Inc\secure-builds\Invincible_Inc_Sovereign_Dev_v2.zip`
 - Current native package source: `Omni-repo/Invincible.Native/Invincible.App/bin/x64/Omni-Release/net8.0-windows10.0.19041.0/win-x64`
 - Portal behavior: the dashboard and distribution page resolve `/api/dist/status`, prefer `omni-native-build`, then `secure-dev-build`, then `windows-build`.
+- Static website behavior: the `/sites/omni/admin/` download panel now resolves `/api/dist/status` and follows the same artifact priority as the portal before issuing a single-use ticket.
 - Legacy note: the repo-local `.tmp_appdata` secure-build copy should be treated as stale for handoff purposes.
 
 ### Verification Notes
