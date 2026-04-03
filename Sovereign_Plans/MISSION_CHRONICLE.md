@@ -717,3 +717,15 @@ Restart the Twingate Client app in the system tray and connect to the `invincibl
 3. Fixed the remaining Windows App SDK packaging warning by declaring `WindowsAppSDKSelfContained=true` and pinning the native build platform to `x64` in `Omni-repo/Invincible.Native/Invincible.App/Invincible.App.csproj`, which matches the current self-contained, installer-backed Omni native deployment path.
 4. Refreshed the native README and continuity trail so future sessions inherit the correct reference set and packaging state instead of the earlier warning-only note.
 **Verification:** `dotnet build Omni-repo/Invincible.Native/Invincible.App/Invincible.App.csproj` passed without the prior `PublishSingleFile` warning.
+
+### @Scholar | [VERIFIED] | 05:49
+**Raw Request:** "theres a section specifically on debugging and end up update processses in ... 'omni prompt template HIGH AUTHORITY WRITTEN BY HAND BY CALEB ECKLEBERRY.txt' that you should follow."
+**AI Interpretation:** The owner required the handwritten Omni update/debugging doctrine to affect implementation, not just documentation. The native shell had to start owning update control instead of leaving that logic in the older backend launcher path.
+**Summary:** Moved the first update-control slice into the native Omni WinUI shell by adding live update checks, secure native download targeting, rollback-baseline capture, and native diagnostics export.
+**Outcome:**
+1. Fixed the native sovereign download path so `DownloadPage` now uses `/api/dist/secure-dev-build` instead of incorrectly targeting the generic installer route.
+2. Added `OmniUpdateService` in the WinUI shell to read `/health` and `/api/dist/status`, choose the preferred published build, compare it against the local rollback ledger, and report native update state.
+3. Added local rollback baseline capture under `%LocalAppData%\Invincible\Omni\update-control` before native download handoff.
+4. Added native diagnostics export so update debugging now produces a structured JSON bundle with current version, published build metadata, health payload, and rollback snapshot history.
+5. Updated the native README and release logs so the debugging/update doctrine from the handwritten Omni prompt is reflected in the current runtime truth.
+**Verification:** `dotnet build Omni-repo/Invincible.Native/Invincible.App/Invincible.App.csproj` passed with `0 warnings` and `0 errors`.

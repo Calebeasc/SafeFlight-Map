@@ -77,6 +77,7 @@ The environment is now ready for autonomous research and execution. Omni continu
 - The WinUI shell remains `Omni-repo/Invincible.Native/Invincible.App/OmniWindow.xaml`.
 - A dedicated native `TemporalPage` now hosts `http://localhost:5174/temporal`.
 - The native temporal module is wired through `OmniWindow.xaml`, `OmniWindow.xaml.cs`, and `Pages/Omni/OmniOverviewPage.xaml`.
+- `Pages/Omni/DownloadPage.xaml` now owns the first native update-control slice: live `/health` + `/api/dist/status` checks, secure download targeting, rollback-baseline capture, and local diagnostics export.
 
 ### Distribution Chain
 - Secure ticket route: `POST /api/dev/generate-download-ticket`
@@ -94,3 +95,4 @@ The environment is now ready for autonomous research and execution. Omni continu
 - Native WinUI build verified with `dotnet build Omni-repo/Invincible.Native/Invincible.App/Invincible.App.csproj`
 - Native recovery commit pushed to Omni `main`: `418b54e` (`fix: restore omni native winui build`)
 - Native packaging warning cleared by declaring `WindowsAppSDKSelfContained=true` and pinning the project to `x64` in `Invincible.App.csproj`
+- Native update-control slice verified in WinUI after the secure download route fix and local rollback/diagnostics additions
