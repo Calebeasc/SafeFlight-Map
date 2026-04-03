@@ -729,3 +729,15 @@ Restart the Twingate Client app in the system tray and connect to the `invincibl
 4. Added native diagnostics export so update debugging now produces a structured JSON bundle with current version, published build metadata, health payload, and rollback snapshot history.
 5. Updated the native README and release logs so the debugging/update doctrine from the handwritten Omni prompt is reflected in the current runtime truth.
 **Verification:** `dotnet build Omni-repo/Invincible.Native/Invincible.App/Invincible.App.csproj` passed with `0 warnings` and `0 errors`.
+
+### @Scholar | [VERIFIED] | 06:42
+**Raw Request:** "do that starting with thefull native auto apply engine"
+**AI Interpretation:** The owner wanted the handwritten Omni updater doctrine completed, which meant promoting a compatible native artifact lane, stopping the WinUI updater from targeting the legacy sovereign dev bundle, and implementing a real staged apply/revert flow inside the native shell.
+**Summary:** Completed the first full native Omni auto-apply engine by exposing an `omni-native-build` artifact lane, wiring portal/native preference to that lane, and adding authenticated staged apply plus rollback inside the WinUI shell.
+**Outcome:**
+1. **Compatible Artifact Lane:** Added `omni-native-build` to `Omni-repo/backend/src/app/api/distribution.py` / `backend/src/app/core/distribution.py`, backed by the actual WinUI output tree under `Invincible.Native/Invincible.App/bin/x64/Omni-Release/.../win-x64`.
+2. **Portal Alignment:** Updated `Omni-repo/portal/src/pages/Dashboard.tsx` and `Omni-repo/portal/src/pages/Distribution.tsx` so signed-in Windows download actions now prefer `omni-native-build`, then fall back to the legacy sovereign package, then the installer.
+3. **Native Auto-Apply:** Rebuilt `Omni-repo/Invincible.Native/Invincible.App/Services/OmniUpdateService.cs` so WinUI can download the native bundle through the authenticated backend session, validate the archive, stage it locally, capture rollback snapshots, launch an external file-swap helper, record install state, and relaunch the app.
+4. **Native Rollback:** Extended `Pages/Omni/DownloadPage.xaml` and `Pages/Omni/DownloadPage.xaml.cs` with `DOWNLOAD AND APPLY` and `REVERT TO LAST SNAPSHOT`, while preserving the manual ticketed handoff path.
+5. **Reference Refresh:** Confirmed additional active Omni guidance from `Sovereign_Plans/FUTURE_PLAN_MAP.md`, `Sovereign_Plans/CCTV_GODVIEW_INTEL.md`, `Sovereign_Plans/OMNI_SYSTEM_OF_ACTION.md`, `Sovereign_Plans/ROADMAP.md`, and `Sovereign_Plans/PALANTIR_GIS_INTEL.md` alongside the handwritten prompt and the previously active Omni blueprint files.
+**Verification:** `dotnet build Omni-repo/Invincible.Native/Invincible.App/Invincible.App.csproj` passed with `0 warnings` and `0 errors`; `npm.cmd run build` passed in `Omni-repo/portal`; `python -m py_compile` passed for `Omni-repo/backend/src/app/api/distribution.py` and `Omni-repo/backend/src/app/core/distribution.py`.

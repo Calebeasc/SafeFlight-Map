@@ -67,6 +67,10 @@ The environment is now ready for autonomous research and execution. Omni continu
 - `Sovereign_Plans/PALANTIR_ONTOLOGY_INTEL.md`
 - `Sovereign_Plans/CONTRIBUTING.md`
 - `Sovereign_Plans/MISSION_CONTROL.md`
+- `Sovereign_Plans/FUTURE_PLAN_MAP.md`
+- `Sovereign_Plans/CCTV_GODVIEW_INTEL.md`
+- `Sovereign_Plans/OMNI_SYSTEM_OF_ACTION.md`
+- `Sovereign_Plans/ROADMAP.md`
 
 ### Omni Web State
 - `Omni-repo/portal` is the active operator website for Omni module access.
@@ -77,15 +81,17 @@ The environment is now ready for autonomous research and execution. Omni continu
 - The WinUI shell remains `Omni-repo/Invincible.Native/Invincible.App/OmniWindow.xaml`.
 - A dedicated native `TemporalPage` now hosts `http://localhost:5174/temporal`.
 - The native temporal module is wired through `OmniWindow.xaml`, `OmniWindow.xaml.cs`, and `Pages/Omni/OmniOverviewPage.xaml`.
-- `Pages/Omni/DownloadPage.xaml` now owns the first native update-control slice: live `/health` + `/api/dist/status` checks, secure download targeting, rollback-baseline capture, and local diagnostics export.
+- `Pages/Omni/DownloadPage.xaml` now owns the active native update-control path: live `/health` + `/api/dist/status` checks, authenticated native package download, staged auto-apply, rollback snapshots, revert flow, and local diagnostics export.
 
 ### Distribution Chain
 - Secure ticket route: `POST /api/dev/generate-download-ticket`
+- Native compatible artifact route: `GET /api/dist/omni-native-build`
 - Secure artifact route: `GET /api/dist/secure-dev-build?ticket=...`
 - Secondary installer route: `GET /api/dist/windows-build?ticket=...`
 - Build manifest route: `GET /api/dist/status`
 - Current verified secure artifact: `C:\Users\eckel\AppData\Local\Invincible.Inc\secure-builds\Invincible_Inc_Sovereign_Dev_v2.zip`
-- Portal behavior: the dashboard and distribution page resolve `/api/dist/status`, prefer `secure-dev-build`, and fall back to `windows-build` if the secure package is unavailable or invalid.
+- Current native package source: `Omni-repo/Invincible.Native/Invincible.App/bin/x64/Omni-Release/net8.0-windows10.0.19041.0/win-x64`
+- Portal behavior: the dashboard and distribution page resolve `/api/dist/status`, prefer `omni-native-build`, then `secure-dev-build`, then `windows-build`.
 - Legacy note: the repo-local `.tmp_appdata` secure-build copy should be treated as stale for handoff purposes.
 
 ### Verification Notes
@@ -95,4 +101,4 @@ The environment is now ready for autonomous research and execution. Omni continu
 - Native WinUI build verified with `dotnet build Omni-repo/Invincible.Native/Invincible.App/Invincible.App.csproj`
 - Native recovery commit pushed to Omni `main`: `418b54e` (`fix: restore omni native winui build`)
 - Native packaging warning cleared by declaring `WindowsAppSDKSelfContained=true` and pinning the project to `x64` in `Invincible.App.csproj`
-- Native update-control slice verified in WinUI after the secure download route fix and local rollback/diagnostics additions
+- Native auto-apply engine verified at compile level after the compatible `omni-native-build` lane, staged apply/revert workflow, and native install-state ledger were added
