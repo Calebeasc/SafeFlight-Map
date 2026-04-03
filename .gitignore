@@ -10,8 +10,8 @@ dist/
 build/
 *.spec
 # Keep PyInstaller spec files
-!scanner-map/user_app/user.spec
-!scanner-map/backend/invincible.spec
+!Grid/user_app/user.spec
+!Grid/backend/invincible.spec
 
 # Node
 node_modules/
@@ -34,7 +34,7 @@ scanner-map-scaffold/
 
 # Claude / local config
 .claude/settings.local.json
-scanner-map/.claude/settings.local.json
+Grid/.claude/settings.local.json
 
 # Duplicate bare gitignore file
 gitignore
