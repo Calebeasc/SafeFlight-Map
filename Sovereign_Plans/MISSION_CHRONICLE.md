@@ -753,3 +753,15 @@ Restart the Twingate Client app in the system tray and connect to the `invincibl
 4. Mirrored the same admin-page manifest logic into `Omni-repo/site/admin/index.html` so the GitHub clone and the mounted local Omni website do not drift.
 5. Verified the public-site chain in-process: landing page link, login route, developer auth, distribution manifest resolution, ticket issuance, and HEAD access to the selected native artifact route.
 **Verification:** In-process FastAPI smoke checks confirmed `/sites/omni/`, `/sites/omni/login/`, `/auth/dev/login`, `/api/dist/status`, `/api/dev/generate-download-ticket`, and the preferred native download route now line up for the static website flow.
+
+### @Scholar | [VERIFIED] | 07:36
+**Raw Request:** "ensure all changes are sealed up and properly sent out and then log all that you did and document changes with scholar agent so i can close out this chat for the night and not lose any documentation."
+**AI Interpretation:** The owner wanted a final continuity pass that confirms push state, removes any ambiguity around loose local test residue, and records the exact end-of-night Omni state in the durable handover files.
+**Summary:** Sealed the Omni work for handoff by confirming the shipped commits, suppressing local smoke-test runtime cache noise in the GitHub clone, and recording the final closeout state in Scholar continuity.
+**Outcome:**
+1. Confirmed the shipped Omni GitHub state at commit `b77c509` on `main` and the continuity/handover repo state at commit `0ca8942` on `pr-branch`.
+2. Confirmed the public-site authenticated Windows delivery flow is live against the mounted Omni website and resolves `omni-native-build` first.
+3. Added `backend/src/runtime-data/` to `Omni-repo/.gitignore` so local SQLite runtime cache files produced by sovereign smoke runs do not appear as loose source changes in future sessions.
+4. Reconfirmed that the final verified website download target was `Omni_Native_Sovereign_latest.zip` from `/api/dist/omni-native-build` with `Content-Length: 70101385`.
+5. Refreshed the continuity layer so the current session can be closed without losing the operational state or the source-of-truth file locations.
+**Verification:** `Omni-repo` no longer reports the smoke-test runtime cache as a pending change after the ignore rule; the mounted `/sites/omni` flow, ticket issuance, and native artifact HEAD response were already verified in-process during the final seal-up pass.

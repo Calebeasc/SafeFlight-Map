@@ -105,3 +105,6 @@ The environment is now ready for autonomous research and execution. Omni continu
 - Native recovery commit pushed to Omni `main`: `418b54e` (`fix: restore omni native winui build`)
 - Native packaging warning cleared by declaring `WindowsAppSDKSelfContained=true` and pinning the project to `x64` in `Invincible.App.csproj`
 - Native auto-apply engine verified at compile level after the compatible `omni-native-build` lane, staged apply/revert workflow, and native install-state ledger were added
+- Static website download-flow repair pushed to Omni `main`: `b77c509` (`fix: align omni site manifest download flow`)
+- Continuity closeout pushed to `Invincible.Inc` `pr-branch`: `0ca8942` (`docs: log omni site download flow`)
+- `Omni-repo/.gitignore` now suppresses `backend/src/runtime-data/` so local sovereign smoke-run SQLite cache files do not pollute source status during future sessions
