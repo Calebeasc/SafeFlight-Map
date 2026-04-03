@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Build artifacts
+dist/
+build/
+*.spec
+# Keep PyInstaller spec files
+!scanner-map/user_app/user.spec
+!scanner-map/backend/invincible.spec
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# App data
+*.db
+.hmac_secret
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Archives / old versions
+*.zip
+scanner-map-v3/
+scanner-map-scaffold/
+
+# Claude / local config
+.claude/settings.local.json
+scanner-map/.claude/settings.local.json
+
+# Duplicate bare gitignore file
+gitignore

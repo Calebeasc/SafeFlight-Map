@@ -1,0 +1,12 @@
+# Normalize line endings: LF in repo, CRLF on Windows checkout
+* text=auto eol=crlf
+
+# Force LF for scripts that need it
+*.sh text eol=lf
+*.ps1 text eol=crlf
+
+# Binaries — no conversion
+*.exe binary
+*.db  binary
+*.png binary
+*.ico binary
