@@ -4,7 +4,7 @@
     {
       "name": "FastAPI Backend",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["scanner-map/backend/run.py"],
+      "runtimeArgs": ["Grid/backend/run.py"],
       "port": 8742
     },
     {
@@ -12,7 +12,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173,
-      "cwd": "scanner-map/frontend"
+      "cwd": "Grid/frontend"
     }
   ]
 }
