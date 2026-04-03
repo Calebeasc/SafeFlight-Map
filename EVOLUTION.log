@@ -1,0 +1,204 @@
+# EVOLUTION.log — Invincible.Inc
+A ledger of major architectural transitions and strategic milestones.
+
+[2026-03-29] 💎 C-LEVEL MATRIX PIVOT (Nuitka)
+- **Hardening:** Abandoned PyInstaller (script zipping) for Nuitka (C-compilation). 
+- **Anti-Reverse Engineering:** Source code is now translated to C and compiled to machine code, making .pyc unpacking impossible.
+- **Bypass:** Resolved Windows SmartScreen/LoadLibrary failures by eliminating the temporary extraction folder dependency.
+- **Performance:** Native memory management for high-speed SIGINT processing.
+- **Orchestration:** Transitioned from raw Python scripts to a Windows-distributable architecture.
+- **UI Architecture:** Engineered the Lattice SIGINT COP (LatticeSignalView.jsx) to handle high-speed ingestion (500ms bursts).
+- **Security:** Implemented zero-redirect download logic on the Explainer website to maintain operator presence.
+- **Packaging:** Created the Inno Setup blueprint (Invincible_Setup.iss) with custom EULA and AppData installation support.
+- **Ingestion:** Deployed the HighSpeedCaptureEngine (Signal_Ingestion_Module.py) to replace sequential scanning with a ring-buffer model.
+- **Critical Fix:** Shifted to **Single-Binary (--onefile)** architecture to resolve "Missing Python312.dll" errors on non-dev machines. All dependencies are now statically bundled.
+
+[2026-03-28] 🏗️ FOUNDATION PHASE
+- Established the standardized agent fleet (Claude, Gemini, Codex, OpenCode).
+- Unified the project registry in .ai-agents/manifest.md.
+- Developed the core SIGINT/DeFlock mapping backend.
+[2026-03-29] DAILY CHECKPOINT (v1.1.1)
+- Automated daily release ledger written to `scanner-map\release_logs\daily\2026-03-29.json`.
+- Daily runtime save snapshot recorded if local app data was present.
+
+[2026-03-30] DAILY CHECKPOINT (v1.1.1)
+- Automated daily release ledger written to `scanner-map\release_logs\daily\2026-03-30.json`.
+- Daily runtime save snapshot recorded if local app data was present.
+
+[2026-03-30] C-LEVEL MACHINE COMPILATION (v1.2.0)
+- **Hardening:** Migrated `build.ps1` from PyInstaller to **Nuitka**. Binaries are now C++ machine-code instead of zipped scripts.
+- **Automation:** Refactored `LATTICE_MONITOR.ps1` to implement the 24-hour Scout research mandate and 5-minute Link Sync loops.
+- **UI Parity:** Finalized Vite proxy configuration for all dev-side intelligence endpoints (/geo, /identity, /alfred).
+
+[2026-03-31] DAILY CHECKPOINT (v1.1.1)
+- Automated daily release ledger written to `Invincible\release_logs\daily\2026-03-31.json`.
+- Daily runtime save snapshot recorded if local app data was present.
+
+[2026-04-01] DAILY CHECKPOINT (v1.1.1)
+- Automated daily release ledger written to `Invincible\release_logs\daily\2026-04-01.json`.
+- Daily runtime save snapshot recorded if local app data was present.
+
+[2026-04-03] 🧹 FULL PLATFORM RENAME + OMNI DESIGN HARDENING
+
+## RENAME & CODEBASE PURGE
+- **Scanner-map → Grid:** Purged ALL legacy `scanner-map`, `SafeFlightMap`, `SafeFlight`, `InvincibleInc.exe`, and `DevInvincible` references from every file across Grid, Oracle, and Omni repos.
+- **Affected files:** Grid/user_app/run.py, Grid/scripts/update_check.py, Grid/installer/*.iss, Grid/scripts/build.ps1, Grid/build_installer.bat, Grid/desktop/launcher.py, Grid/backend/src/app/core/distribution.py, Grid/frontend/src/components/DevPanel.jsx, Grid/explainer/index.html, Grid/explainer/contributor-guide.html, Grid/README.md, .github/workflows/release.yml, .gitignore, .claude/launch.json, .cursor/rules/codex-osint.md
+- **Result:** All three repos (Oracle, Grid, Omni) now have clean, correct brand names with no cross-contamination.
+
+## ARCHIVE ORGANIZATION
+- Created `oracle-archive/`, `omni-archive/`, `grid-archive/`, `unknown-archive/` at monorepo root
+- Moved unused root-level files (App.jsx, MapView.jsx, Sidebar.jsx, App.css, scanner-map-v3/, scanner-map-scaffold.zip, root backend/, root frontend/) to appropriate archive folders
+- Only moved confirmed-unused files — no active app code touched
+
+## CROSS-APP CONTAMINATION FIXES
+- **Grid site:** Login button was pointing to Oracle's login page (`http://localhost:8742/sites/oracle/login/`) → fixed to relative `login/`
+- **Oracle site:** Download buttons pointed to `localhost:8742/download/windows` → fixed to `https://github.com/Calebeasc/Oracle/releases/latest`
+- **Omni site:** Homepage links pointed to `localhost:8742/sites/oracle/` and `localhost:8742/sites/invincible/` → fixed to GitHub URLs
+
+## OMNI CRASH FIX (Critical)
+- **Root cause:** `UserModal.jsx` called `useSovereign()` hook without importing it — caused `ReferenceError` on every render, crashing entire React tree with black screen
+- **Fix:** Added `import { useSovereign } from '../context/SovereignContext'`
+- **Secondary fix:** Modal title said `"Oracle"` → corrected to `"Omni"`
+- **Rebuild:** `npm run build:dev` ran successfully, new bundle `dist-dev/assets/index-c3b46add.js` deployed
+
+## OMNI DESIGN POLISH (Palantir Compliance)
+- **UserModal:** Master Key input color `#30D158` (Oracle green) → `#60a5fa` (Omni ice blue)
+- **Sidebar:** `MODE_COLORS` teal/green values → cold blue palette (`#60a5fa`, `#2563eb`, `#93c5fd`)
+- **Sidebar:** Removed Oracle-style emoji from `MODE_LABELS` (🎲/📡/🔵/⚡ → text-only DEMO/WI-FI/BLE/BOTH)
+- **Sidebar:** Removed emoji from `SIDEBAR_TABS` (📡/🏆/👥 → text-only Scan/Rank/Team)
+- **Launch.json:** Added Omni Site server entry (Python http.server on port 5175) for marketing page preview
+
+## COMMITS & PUSHES
+- `Calebeasc/Omni main`: 3 commits pushed — crash fix, modal title fix, design polish
+- `Calebeasc/Grid main`: 2 commits pushed — package-lock, naming purge
+- `Calebeasc/Invincible.Inc pr-branch`: launch.json + codex-osint path updates
+
+## VERIFIED WORKING
+- Omni app at port 5174: ✅ Renders login modal correctly (screenshot confirmed)
+- Marketing site design: ✅ Palantir Gotham aesthetic — black/cold-blue, classification bar, sharp corners, monospace labels, tier table, module grid, architecture stack
+- Login page: ✅ JWT auth, sharp design, redirects to admin panel on success
+- All three apps fully isolated: Oracle, Grid, Omni have no cross-contamination
+
+
+---
+
+[2026-04-03] SESSION 2 — PALANTIR COMPLIANCE PASS + CLAUDE.MD GENERATION + HARDENED_PLANS EXPANSION
+
+## PART 1: APP.CSS FINAL TOKEN COMPLIANCE PASS (@refiner)
+
+All remaining Oracle-style tokens purged from Invincible/frontend/src/App.css:
+- .btn-scan: var(--accent) iOS blue -> var(--omni-cold) #2563eb  [HIGH PRIORITY]
+- .toggle.on: var(--green) Oracle #30D158 -> var(--omni-green) #22c55e  [HIGH PRIORITY]
+- .sidebar-tab-btn.active / .stat-card .val / .stat-detail-row .dv / .gps-coords: var(--accent) -> var(--omni-ice)
+- .btn-export: var(--accent) -> var(--omni-ice), Courier New monospace, border-radius 3px, omni-border
+- Border-radius violations: stat-card 14->3px, toggle-row 12->3px, toggle pill 16->4px,
+  toggle thumb 50%->2px, enc-item 10->3px, gps-card 12->3px; added omni-border to all cards
+- dist-dev rebuilt (6.43s) -> commit 81af4a1 -> pushed Calebeasc/Omni main
+
+---
+
+## PART 2: CLAUDE.MD GENERATION — ALL THREE REPOS
+
+Oracle/CLAUDE.md [commit 0ae6d95 — Calebeasc/Oracle main]:
+  - Oracle bounded context (consumer GPS, route tracking, authorized scanning)
+  - Teal/iOS palette rules + FORBIDDEN colors (no Omni cold blue, no Grid electric)
+  - Agent assignments: @aether, @refiner, @anderton
+  - Dev workflow + pre-commit checklist + known gotchas + cross-platform parity mandate
+
+Grid/CLAUDE.md [commit a8b38c9 — Calebeasc/Grid main]:
+  - Grid bounded context (network topology, heat maps, encounter logging)
+  - Tron electric palette + Watcher OUI 00:25:DF (blue) / Stopper B4:1E:52 (red)
+  - Branch strategy: main=stable, dev=active; dev workflow + pre-commit checklist
+
+Root remote URL fixed:
+  - Was: https://github.com/Calebeasc/SafeFlight-Map.git
+  - Now: https://github.com/Calebeasc/Invincible.Inc.git
+
+---
+
+## PART 3: HARDENED_PLANS — /init + /batch EXPANSION PASS
+
+Directory: C:\Users\eckel\OneDrive\Documents\Invincible.Inc\Hardened_Plans (28 files processed)
+Commit: Calebeasc/Invincible.Inc pr-branch f5782b2 (30 files, 2604 insertions)
+
+Hardened_Plans/CLAUDE.md [NEW]:
+  - Full 30-file inventory, DDD bounded contexts map, Clean Architecture dependency rule,
+    3-tier implementation priority (Now / Next / Future)
+
+NATIVE_APP_ARCHITECTURE.md [DONE]:
+  - WinUI 3 project structure (Domain->Application->Infrastructure->Presentation rings)
+  - App.xaml.cs: IServiceProvider composition root + full DI registrations
+  - MainWindow.xaml: NavigationView shell (Dashboard / Scan / Lattice / Replay)
+  - App.xaml: Titanium Workspace ResourceDictionary (all omni-* brushes)
+  - Build-time flavor gates via #if OMNI_UNLOCKED conditional compilation
+
+PALANTIR_ONTOLOGY_INTEL.md [DONE]:
+  - TypeScript: LatticeObject, Signal, GpsCoordinate, MacAddress, LatticeLink (zero deps)
+  - Python HarmonizationEngine: fuzzy OUI+SSID matching, 82% threshold, deterministic merge hash
+  - C# LatticeObject: derived IntegrityRating (pure domain, no DB denormalization)
+  - C# IManagedAsset interface + AssetDetailViewModel (polymorphic, any asset type)
+
+GAUSSIAN_SPLATTING_INTEL.md [DONE]:
+  - React SplatViewport + GaussianSplatRenderer (frustum culling, sequential streaming, alpha-sort)
+  - iOS: WKWebView + Swift<->JS bridge
+  - Windows: WebView2 + PostWebMessageAsJson bridge
+  - Single WebGL renderer shared across all platforms
+
+ROADMAP.md Phase 3+4:
+  - SDR: ISignalSource interface + SdrBridgeService P/Invoke pattern
+  - Drone: MAVLink UDP -> DroneSignalAdapter
+  - Mesh: ZeroMQ PUB/SUB, MeshNode Aggregate, INodeRepository
+  - CesiumJS: resium + Cesium.Entity binding for LatticeObject arrays
+  - Great Partition: repos separated (done); shared @invincible/domain npm pkg (pending)
+
+OMNI_PRODUCT_BLUEPRINT.md:
+  - CesiumJS Entity binding (resium), TimeCursor 4D scrubber, iOS WKWebView CesiumJS path
+
+---
+
+## PART 4: LOGIN MODAL CLEANUP + SETTINGS PANEL REDESIGN [commit 34d8ce7]
+
+UserModal.jsx:
+  - REMOVED: vehicleCatalog imports, LEGACY_VEHICLES, VEHICLES array, vehicle state
+  - REMOVED: emoji vehicle grid JSX block from login flow
+  - Vehicle now silent: localStorage.getItem('sfm_vehicle') || 'car'
+  - Login modal: Operator ID + Passphrase + Authenticate — no vehicle selector
+
+SettingsPanel.jsx — new Platform section:
+  - getStarterVehicles() -> Palantir text list (no emojis)
+  - Active row: 2px left border omni-cold, rgba(37,99,235,0.08) bg, ACTIVE tag
+  - Persists to localStorage immediately on click
+  Design cleanup:
+  - Removed all emojis: gear header, phone GPS, watcher/stopper tone labels
+  - GPS status: Oracle #00e676 -> omni-green #22c55e
+  - LOGIN / DEV ELEVATION buttons: borderRadius 8px->3px, Oracle teal->omni cold blue,
+    Courier New uppercase, emojis removed
+  - Sign-out: monospace uppercase, omni-dim, borderRadius 3px
+  - dist-dev rebuilt (6.70s) -> pushed Calebeasc/Omni main
+
+---
+
+## SESSION 2 ALL COMMITS
+
+Calebeasc/Omni main:
+  81af4a1  fix: @refiner full Palantir token compliance — purge all var(--accent) and Oracle colors
+  34d8ce7  fix: vehicle selector moved from login modal -> Settings > Platform section
+
+Calebeasc/Oracle main:
+  0ae6d95  feat: add CLAUDE.md — DDD + Clean Architecture + Oracle design rules
+
+Calebeasc/Grid main:
+  a8b38c9  feat: add CLAUDE.md — DDD + Clean Architecture + Grid design rules
+
+Calebeasc/Invincible.Inc pr-branch:
+  f5782b2  feat: /init Hardened_Plans — CLAUDE.md index + implementation expansion pass
+
+---
+
+## NEXT SESSION TODO
+
+1. Merge pr-branch -> main on Calebeasc/Invincible.Inc via GitHub PR
+2. Shared domain package: @invincible/domain npm pkg (TypeScript LatticeObject/Signal/GpsCoordinate)
+3. CesiumJS: replace MapView.jsx Leaflet with resium (VITE_CESIUM_TOKEN env var)
+4. WinUI 3: scaffold Invincible.Native/ per NATIVE_APP_ARCHITECTURE.md spec
+5. /simplify pass: Clean Code (Uncle Bob) refactor — not yet executed this session
