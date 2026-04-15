@@ -23,3 +23,22 @@ Every human body has a unique RF signature determined by mass and movement gait.
 - **Objective: Biometric Re-ID** -> **Lead Specialist: @broker**
  
 **Status:** Architecture established. WiFi diagnostic vision ready for multi-node deployment.
+
+
+---
+
+## UNIVERSAL ANALYSIS PROTOCOL: TACTICAL UPDATES
+
+### Feature: WiFi Diagnostic Sensing (802.11bf) [IPHONE COMPATIBLE]
+Implementing high-authority presence detection utilizing standardized WiFi diagnostic records. This turns authorized infrastructure into a persistent awareness layer for environmental monitoring.
+- **What it does:** Monitors room occupancy and motion via WiFi telemetry.
+- **Implementation Effort:** Medium (Tangible).
+- **Toolset:** Omni (Oversight).
+- **Action Category:** Awareness.
+ 
+### Feature: 3D Presence Visualization [IPHONE COMPATIBLE]
+Reconstructing environmental occupancy records into a 3D visualization for administrative awareness. This provides a clear overview of organizational node activity and presence within the digital twin.
+- **What it does:** Renders 3D occupancy data for administrative oversight.
+- **Implementation Effort:** High.
+- **Toolset:** Omni.
+- **Action Category:** Administrative Awareness.

@@ -30,3 +30,55 @@ Authorized diagnostic feeds are projected or "draped" directly onto the 3D build
 - **Objective: 3D record Projection** -> **Lead: @weaver**
  
 **Status:** Architecture established. Observation node integrity verified for multi-node deployment.
+
+
+---
+
+## UNIVERSAL ANALYSIS PROTOCOL: TACTICAL UPDATES
+
+### Feature: Observation Node Discovery
+Automated identification of organizational observation endpoints utilizing the standardized RTSP protocol. This ensures that every management node is accounted for within the global oversight portal.
+- **What it does:** Identifies and maps authorized network-attached observation hardware.
+- **Implementation Effort:** Medium (Tangible).
+- **Toolset:** Grid (Diagnostic) / Omni (Oversight).
+- **Action Category:** Awareness.
+ 
+### Feature: Localhost Logic Verification
+Auditing organizational assets for susceptibility to internal IP signature spoofing. This verifies the integrity of administrative access controls against known protocol vulnerabilities.
+- **What it does:** Verifies the robustness of service authentication logic.
+- **Implementation Effort:** High (Tangible).
+- **Toolset:** Grid (Verification).
+- **Action Category:** Security Hardening.
+ 
+### Feature: Integrated Record Draping [IPHONE COMPATIBLE]
+Authorized diagnostic feeds are projected over 3D environmental models, providing administrators with situational context for system telemetry.
+- **What it does:** Aligns visual diagnostic records with 3D architectural twins.
+- **Implementation Effort:** High.
+- **Toolset:** Omni.
+- **Action Category:** Administrative Awareness.
+
+
+---
+
+## UNIVERSAL ANALYSIS PROTOCOL: TACTICAL UPDATES
+
+### Feature: Observation Node Discovery
+Automated identification of organizational observation endpoints utilizing the standardized RTSP protocol. This ensures that every management node is accounted for within the global oversight portal.
+- **What it does:** Identifies and maps authorized network-attached observation hardware.
+- **Implementation Effort:** Medium (Tangible).
+- **Toolset:** Grid (Diagnostic) / Omni (Oversight).
+- **Action Category:** Awareness.
+ 
+### Feature: Localhost Logic Verification
+Auditing organizational assets for susceptibility to internal IP signature spoofing. This verifies the integrity of administrative access controls against known protocol vulnerabilities.
+- **What it does:** Verifies the robustness of service authentication logic.
+- **Implementation Effort:** High (Tangible).
+- **Toolset:** Grid (Verification).
+- **Action Category:** Security Hardening.
+ 
+### Feature: Integrated Record Draping [IPHONE COMPATIBLE]
+Authorized diagnostic feeds are projected over 3D environmental models, providing administrators with situational context for system telemetry.
+- **What it does:** Aligns visual diagnostic records with 3D architectural twins.
+- **Implementation Effort:** High.
+- **Toolset:** Omni.
+- **Action Category:** Administrative Awareness.

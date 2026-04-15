@@ -16,6 +16,8 @@ This matrix identifies the authoritative leads for all system objectives. All ag
   - *Responsibility:* High-level strategy, code architecture, and mission coordination.
 - **Objective: Spatiotemporal Fusion Lead** -> **Lead: @gemini**
   - *Responsibility:* Spatial intelligence and spatiotemporal data mapping.
+- [ ] **Objective: [OMNI-CORE] JP 3-60 Doctrine Execution** -> **Lead: @tactical-logician**
+  - *Responsibility:* Implementing the 6-Phase Joint Targeting Cycle and F2T2EA decision loop.
 - **Objective: Architectural Integrity** -> **Lead: @anderton**
   - *Responsibility:* Primary execution lead and workforce coordinator.
 - **Objective: Regulatory Compliance** -> **Lead: @overseer**

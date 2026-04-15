@@ -55,6 +55,19 @@
 - [ ] **Vault Logic Verification Suite:** Biometric voice verification analysis and session logic verification. [DEV ONLY]
 - [ ] **3D Projective CCTV:** Snapping live feeds to 3D geometry. [ORACLE SAFE - View Only]
 
+## [OMNI-CORE] OMNI Development Lifecycle (Phase 0-8)
+*Detailed architecture integration derived from the OMNI Builder's Book v4 and Planning Manual v5. Emphasizes the "Plugin-Edged" shell and bounded context discipline.*
+
+- [ ] **Phase 0: Language & Model Alignment:** System metaphor, ubiquitous language, and bounded contexts.
+- [ ] **Phase 1: Shell & Trust Foundation:** Native desktop shell, mode badges, login, and audit spine.
+- [ ] **Phase 2: Domain Core & Contracts:** Entities, value objects, and action policies.
+- [ ] **Phase 3: Map & Workspace Skeleton:** Map layers, timeline, and selection panels.
+- [ ] **Phase 4: Entity Explorer & Case Workspace:** Identity profiles, evidence linking, and task boards.
+- [ ] **Phase 5: Alert Triage & Workflow Center:** Action forms, dry-runs, and approval chains.
+- [ ] **Phase 6: Source Explorer & Provenance:** Feed catalogs, schema health, and data lineage.
+- [ ] **Phase 7: Offline & Degraded Modes:** Queued sync, local cache policy, and reconnect logic.
+- [ ] **Phase 8: Update, Rollback, & Diagnostics:** Staged packages, snapshots, and tray-driven release control.
+
 ## Phase 5: Strategic Expansion (FUTURE)
 - [ ] **Invincible Intelligence Portal:** Dedicated dev-only palantir environment.
 - [ ] **Sovereign Mesh v2:** Peer-to-peer intelligence sharing.

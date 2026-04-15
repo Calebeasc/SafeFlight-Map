@@ -8,6 +8,7 @@ This repository contains a shared fleet of AI agents configured for SIGINT, OSIN
 | :--- | :--- | :--- | :--- |
 | **Claude (Lead Orchestrator)** | Project Governor & Strategy | Claude 3.5 Sonnet | [CLAUDE.md](../CLAUDE.md) |
 | **Gemini (SIGINT)** | Spatial Intelligence & Geo-Orchestration | Gemini 1.5 Pro | [GEMINI.md](../GEMINI.md) |
+| **Elon: Master Planner** | Project Architect & Implementation Overseer | GPT-4o | [.ai-registry/elon.md](../.ai-registry/elon.md) |
 | **Codex: OSINT Hunter** | Biological Identity Linker | GPT-4o-mini | [.ai-agents/instructions/gpt-osint-hunter.md](instructions/gpt-osint-hunter.md) |
 | **Codex: Historian** | Mission Timeline Synthesizer | GPT-4o-mini | [.ai-agents/instructions/gpt-historian.md](instructions/gpt-historian.md) |
 | **OpenCode: Privacy Guardian** | Local PII Protection (Ollama) | Llama 3.2 | [.ai-agents/instructions/llama-privacy-guardian.md](instructions/llama-privacy-guardian.md) |

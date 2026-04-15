@@ -7,6 +7,9 @@ __pycache__/
 
 # Build artifacts
 dist/
+dist-dev/
+dist-user/
+dist_installer/
 build/
 *.spec
 # Keep PyInstaller spec files
@@ -15,8 +18,6 @@ build/
 
 # Node
 node_modules/
-frontend/node_modules/
-frontend/dist/
 
 # App data
 *.db
@@ -39,3 +40,26 @@ Grid/.claude/settings.local.json
 # Duplicate bare gitignore file
 gitignore
 .aider*
+
+# Large binaries / PDFs (keep plan docs, exclude reference material)
+*.exe
+*.msi
+*.dll
+setup_latest.exe
+
+# IDE / editor state
+.dotnet-cli/
+.dotnet-home/
+
+# Temporary / scratch
+*.tmp
+tmp/
+logs/
+nanobanana-output/
+sentinel_monitor/
+$AgentFile
+
+# Release artifacts
+Invincible/release_logs/
+Invincible/installer/*.ico
+Invincible/installer/*.bmp

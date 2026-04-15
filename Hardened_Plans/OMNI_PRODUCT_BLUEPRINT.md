@@ -41,10 +41,18 @@
  
 ---
  
-## 🎯 CORE CAPABILITIES
+## 🏗️ [OMNI-CORE] TITANIUM WORKSPACE UI SPECIFICATION
  
-### 1. 3D GLOBAL PANOPTICON (SPATIAL INTELLIGENCE)
-- **CesiumJS Integration:** High-performance 3D globe fusion of orbital, airborne, and ground data layers. **[IPHONE COMPATIBLE]**
+### 1. Visual DNA & Philosophy
+The OMNI interface follows the **Titanium Workspace** philosophy: a clinical, desaturated, high-authority environment that eliminates visual noise to prioritize data density and decision speed.
+- [ ] **Palette:** Strictly desaturated charcoal. `oklch(20% 0.02 260)` (Primary Void), `oklch(25% 0.02 260)` (Surface).
+- [ ] **Typography:** 11px-13px high-legibility sans-serif (Inter) and monospaced (JetBrains Mono) for telemetry.
+- [ ] **Color Space:** Perceptually uniform **OKLCH** for all semantic indicators.
+- [ ] **Shaders:** Integrated **Analytical Shaders** (Wireframe, Monochrome, Thermal) for 3D terrain and asset overlays.
+
+### 2. 3D GLOBAL PANOPTICON (SPATIAL INTELLIGENCE)
+- [ ] **CesiumJS Integration:** High-performance 3D globe fusion of orbital, airborne, and ground data layers. **[IPHONE COMPATIBLE]**
+- [ ] **Analytical Shaders:** Professional 3D rendering modes for clinical management.
 - **Large Geospatial Model (LGM):** Neural visual positioning engine for image-to-coordinate mapping (GeoSpy style). **[IPHONE COMPATIBLE]**
 - **Skyfall Neural Mirrors:** Automated 3D scene completion using Gaussian Splatting and Diffusion. **[IPHONE COMPATIBLE]**
 - **Temporal Reconstruction:** "Time Cursor" logic for historical pattern-of-life analysis and target breadcrumbing. **[IPHONE COMPATIBLE]**

@@ -95,3 +95,48 @@ This document is managed by **Pathfinder (@pathfinder)**. It provides the implem
         <action>Refactored `LATTICE_MONITOR.ps1` with 5-minute Link Sync checks to ensure real-time response to `DEVDRAFT.md` updates.</action>
     </automation_loop>
 </structural_task_architecture>
+
+---
+
+### [OMNI-CORE] Phase 0-8 Build Order & Plugin-Edged Philosophy [ACTIVE]
+<structural_task_architecture>
+    <task>
+        <objective>Implement the OMNI native operational desktop platform using the strict 9-phase sequence and "Plugin-Edged" shell philosophy.</objective>
+        <agent_assignment>@claude & @weaver</agent_assignment>
+        <rationale>The shell must be treated as a plugin edge, not the core brain. Core rules, policies, and domain logic stay inside; frameworks, DBs, and UI remain replaceable details.</rationale>
+    </task>
+</structural_task_architecture>
+
+- [ ] **Phase 0: Language and Model Alignment:** Establish ubiquitous language, bounded context map, and system metaphor (cockpit over a living world model).
+- [ ] **Phase 1: Shell and Trust Foundation:** Construct the "Plugin-Edged" native desktop shell, login screen, tray icon, and secure local config store.
+- [ ] **Phase 2: Domain Core and Application Contracts:** Build core entities, action policies, approval domain, and repository interfaces.
+- [ ] **Phase 3: Map and Workspace Skeleton:** Implement map host panel, layers panel, timeline shell, and saved view model.
+- [ ] **Phase 4: Entity Explorer and Case Workspace:** Develop entity search, detail inspector, case tabs, and evidence linking workflows.
+- [ ] **Phase 5: Alert Triage and Workflow Center:** Construct alert queues, action center with dry-run/validate, and approval routing.
+- [ ] **Phase 6: Source Explorer and Provenance:** Build source registry, health dashboards, schema preview, and lineage views.
+- [ ] **Phase 7: Offline and Degraded Modes:** Enforce capability matrix, local cache policy, queued sync, and conflict handling.
+- [ ] **Phase 8: Update, Rollback, Diagnostics:** Implement update checks, staged installs, rollback screens, and diagnostic packagers.
+
+---
+
+### [OMNI-CORE] Doctrine of Decisive Action
+<structural_task_architecture>
+    <task>
+        <objective>Integrate the 6-Phase Joint Targeting Cycle (JP 3-60) and F2T2EA loop into the OMNI decision engine.</objective>
+        <agent_assignment>@tactical-logician</agent_assignment>
+        <rationale>To ensure all system actions are governed by established military intelligence doctrine, providing a structured, audited, and decisive operational workflow.</rationale>
+    </task>
+</structural_task_architecture>
+
+- [ ] **Phase 1: End State and Commander's Objectives:** Define clear operational goals and constraints within the OMNI environment.
+- [ ] **Phase 2: Target Development and Prioritization:** Systematic identification and analysis of entities for potential action.
+- [ ] **Phase 3: Capabilities Analysis:** Evaluate available system tools (RF, Network, OSINT) against target vulnerabilities.
+- [ ] **Phase 4: Commander's Decision and Force Assignment:** Formalize the approval workflow for high-authority interdictions.
+- [ ] **Phase 5: Mission Planning and Force Execution (F2T2EA):**
+    - [ ] **Find:** Detect targets within the spatiotemporal lattice.
+    - [ ] **Fix:** Positively identify and locate targets with high-fidelity telemetry.
+    - [ ] **Track:** Maintain persistent monitoring of target movement and state.
+    - [ ] **Target:** Select appropriate capabilities and confirm authorization.
+    - [ ] **Engage:** Execute the selected course of action (COA).
+    - [ ] **Assess:** Evaluate the effects of the action and feedback into the cycle.
+- [ ] **Phase 6: Assessment:** Aggregate mission data to refine future targeting logic and agentic behavior.
