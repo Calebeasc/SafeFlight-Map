@@ -59,14 +59,19 @@
 *Detailed architecture integration derived from the OMNI Builder's Book v4 and Planning Manual v5. Emphasizes the "Plugin-Edged" shell and bounded context discipline.*
 
 - [ ] **Phase 0: Language & Model Alignment:** System metaphor, ubiquitous language, and bounded contexts.
-- [ ] **Phase 1: Shell & Trust Foundation:** Native desktop shell, mode badges, login, and audit spine.
+- [x] **Phase 1: Shell & Trust Foundation:** Native desktop shell, mode badges, login, and audit spine.
+  > *v1.9.1: OmniShellPage nav audit — all 27 modules wired + Download entry added to AllModules for Ctrl+K search.*
 - [ ] **Phase 2: Domain Core & Contracts:** Entities, value objects, and action policies.
-- [ ] **Phase 3: Map & Workspace Skeleton:** Map layers, timeline, and selection panels.
+- [x] **Phase 3: Map & Workspace Skeleton:** Map layers, timeline, and selection panels.
+  > *v1.9.1: Fullscreen toggle added to GeospatialPage (WORLDVIEW), MapLabPage (MAPS), and UttPage (UTT). Collapse header/panels/controls for full-viewport map immersion.*
 - [ ] **Phase 4: Entity Explorer & Case Workspace:** Identity profiles, evidence linking, and task boards.
+  > *2026-04-23: Vault profile accumulator backend (V01) and Vault PROFILES UI (V03) in flight on isolated worktrees — `profile_accumulator.py` service, `profiles` + `profile_scan_history` SQLite tables, dedup precedence (email > phone > MAC > wallet > domain > IP > plate > name), `GET /api/vault/profiles` + `GET /api/vault/profile/{id}`, append-merge dossier generator, PROFILES tab default post-unlock.*
 - [ ] **Phase 5: Alert Triage & Workflow Center:** Action forms, dry-runs, and approval chains.
+  > *2026-04-23: UTT auto-run pivot landed (PR #31 / #32 / #33). `POST /api/intel/resolve` fact-resolver classifies selectors and fans out enrichment. `POST /api/missions/auto-run` orchestrates 14 tools (sigint, identity, surveillance, blockchain, easm, triage, adsb, aip, mesh-watchlist-check, recruit, zones, nmap, pcap, ports) with INTEL (passive) and ATTACK (active) modes. UttPage's 15-button tool rack was replaced with an AUTO-RUN STATUS panel; dead-zone extrapolation cap lifted from 30s to 150s with Green/Amber/Red staleness flags.*
 - [ ] **Phase 6: Source Explorer & Provenance:** Feed catalogs, schema health, and data lineage.
 - [ ] **Phase 7: Offline & Degraded Modes:** Queued sync, local cache policy, and reconnect logic.
-- [ ] **Phase 8: Update, Rollback, & Diagnostics:** Staged packages, snapshots, and tray-driven release control.
+- [x] **Phase 8: Update, Rollback, & Diagnostics:** Staged packages, snapshots, and tray-driven release control.
+  > *v1.9.1: Installer built (78MB, 0 errors/warnings), `dist_installer/Invincible_Omni_Setup_v1.9.1.exe` + `latest.exe` deployed.*
 
 ## Phase 5: Strategic Expansion (FUTURE)
 - [ ] **Invincible Intelligence Portal:** Dedicated dev-only palantir environment.

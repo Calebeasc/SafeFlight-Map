@@ -1,6 +1,16 @@
 # EVOLUTION.log — Invincible.Inc
 A ledger of major architectural transitions and strategic milestones.
 
+[2026-04-16] ARION + UTT HARDENING (v2.0.5)
+- **Arion — Speed Camera Layer:** New backend module `speed_cameras.py` queries OpenStreetMap Overpass API for `highway=speed_camera`, `enforcement=maxspeed`, and `enforcement=red_light` nodes across AZ+MN home regions. 18 known fixed enforcement cameras (Scottsdale photo radar, Phoenix I-17, Tempe, MN red-light) as hardcoded fallback. New `_speedCamLayer` MemoryLayer renders speed cameras and red-light cameras directly on the Arion map with toggle control.
+- **Arion — Patrol Vehicle Layer:** New `/arion/patrol-vehicles` endpoint aggregates fleet WiFi/BLE pattern matches from the stoppers module (Cradlepoint, Sierra Wireless, Axon, Motorola, Panasonic) into a unified patrol vehicle feed. New `_patrolLayer` MemoryLayer renders detected patrol vehicles on the map. Proximity alert triggers at 1-mile range for mobile patrol units.
+- **Arion — Traffic Camera Feeds:** New `/arion/traffic-feeds` endpoint provides public DOT traffic camera snapshot URLs (AZ511, MnDOT 511 systems). 18 known cameras with live JPEG snapshot URLs. MnDOT API integration attempts live camera list fetch with fallback to known database.
+- **Arion — 10-Mile Radius Filter:** Civilian aircraft beyond 10 miles of operator position are filtered from the map. LEA and ELEVATED threat aircraft always display regardless of distance. Speed cameras and patrol vehicles also filtered to 10-mile radius when GPS fix available.
+- **Arion — Heading Priority:** Aircraft sorted by threat level (LEA first), then by operator heading (entities ahead of travel direction ranked higher), then by distance. Bearing-relative direction indicators (AHEAD, AHEAD-R, RIGHT, BEHIND-R, BEHIND, BEHIND-L, LEFT, AHEAD-L) added to aircraft info overlays.
+- **UTT — CCTV Live Viewing:** `UttMapCamera` record extended with `FeedUrl` field. `ParseCameras()` now extracts actual feed URLs from backend JSON. Camera tap handler passes real URL to viewer instead of Boolean placeholder. Traffic camera feeds from `/arion/traffic-feeds` merged into UTT camera layer alongside Flock/ALPR cameras.
+- **UTT — Auto-Refresh Timer:** `DispatcherTimer` refreshes CCTV snapshot every 5 seconds when a feed is open. Cache-busting timestamp appended to URL to force fresh image. `ImageOpened` callback updates timestamp display. Timer stops on close, feed failure, or page unload.
+- **Build:** 0 errors, 0 warnings. `dist_installer/latest.exe` updated. App tested — no crash.log entries, stable at 166MB.
+
 [2026-03-29] 💎 C-LEVEL MATRIX PIVOT (Nuitka)
 - **Hardening:** Abandoned PyInstaller (script zipping) for Nuitka (C-compilation). 
 - **Anti-Reverse Engineering:** Source code is now translated to C and compiled to machine code, making .pyc unpacking impossible.
@@ -264,4 +274,65 @@ Calebeasc/Invincible.Inc pr-branch:
 [2026-04-14] DAILY CHECKPOINT (v1.1.1)
 - Automated daily release ledger written to `Invincible\release_logs\daily\2026-04-14.json`.
 - Daily runtime save snapshot recorded if local app data was present.
+
+---
+
+[2026-04-15] 🗺️ FULLSCREEN MAP CONTROLS + BACKEND REAL-OSINT REWRITE + SEARCH FIX (v1.9.1)
+
+## VERSION BUMP: 1.9.0 -> 1.9.1
+
+## FULLSCREEN TOGGLE — 3 MAP PAGES
+- **GeospatialPage (WORLDVIEW):** Added `x:Name` attributes to HeaderPanel, MainContentGrid, LeftColumn, RightColumn, LeftPanel, RightPanel. Added FULLSCREEN button next to EARTH/MAP/RECENTER controls and EXIT FULLSCREEN overlay (red, bottom-right, initially collapsed). `_isFullscreen` field + `ToggleFullscreen_Click` handler collapses header, left panel (312px), right panel (240px) and zeroes column widths.
+- **MapLabPage (MAPS):** Named HeaderBorder and FooterBorder. Added FULLSCREEN button in header bar next to A/B/C engine selector buttons. Added EXIT FULLSCREEN overlay (red, top-right of map host, initially collapsed). `_isFullscreen` field + `ToggleFullscreen_Click` collapses header/footer borders.
+- **UttPage (UTT):** Named UttScrollViewer, UttHeaderSection, UttTargetMissionGrid, UttMapLabel, UttMapGrid, UttMapControlsColumn, UttMapControlsPanel, UttCoaLabel, UttCoaGrid, UttToolsGrid, UttResultsBorder. Added FULLSCREEN button next to REFRESH DATA in VIEW CONTROLS. Added UttExitFullscreenButton overlay (red, bottom-right of map viewport, initially collapsed). `_isFullscreen` field + `ToggleFullscreen_Click` collapses all surrounding sections (header, target/mission, controls panel, CoA board, tools, timeline, results) and zeroes controls column.
+
+## OMNISHELLPAGE SEARCH FIX
+- **OmniShellPage.xaml.cs:** Added Download entry (`new("DL", "Download", "download", "T-1")`) to `AllModules` array. Download/Updates existed in `NavigateToModule` switch and `ModuleTiers` dict but was not discoverable via Ctrl+K global search.
+
+## BACKEND REAL-OSINT REWRITE (8 MODULES)
+- All 8 backend API modules rewritten from fake/stub data to real OSINT implementations: identity, sigint, triage, geolocation, surveillance, malware YARA, le_goliath, adsb_scanner.
+- **Real sources wired:** DuckDuckGo, GitHub API, Reddit API, ip-api.com, crt.sh, Blockchain.com, Etherscan, OpenSky Network, Nominatim.
+- **Biometric matching:** Perceptual image hashing (no external API dependency).
+- **YARA scanning:** Replaced with 5 built-in static analysis rules.
+- **ADS-B scanner:** Queries OpenSky Network API (replaces simulation).
+- **le_goliath.py:** Created and registered in `main.py`.
+
+## FILE SYNC & BUILD
+- Synced all 7 modified files from `src/Invincible.Native/` to root `Invincible.Native/` for installer build compatibility.
+- OmniShellPage nav audit: all 27 modules properly wired.
+- Build: 0 errors, 0 warnings (both src/ and root copies verified).
+- Installer: `dist_installer/Invincible_Omni_Setup_v1.9.1.exe` (78MB) -> copied to `dist_installer/latest.exe`.
+
+---
+
+[2026-04-23] UTT AUTO-RUN PIVOT + VAULT PROFILE ACCUMULATOR (PR #31 / #32 / #33 + V01/V03 in-flight)
+
+## BACKEND — FACT RESOLVER (PR #31 / T01)
+- **New file:** `backend/src/app/api/intel_resolve.py` exposing `POST /api/intel/resolve`.
+- **Selector classification:** Regex-driven target typing for IPv4, MAC, email, domain, phone, plate, BTC/ETH wallet.
+- **Fan-out enrichment:** Delegates to `osint.search_live`, `identity.person_lookup`, `easm.discover_assets`, DNS, Shodan InternetDB, and `blockchain.trace_wallet`. Missing helpers are skipped gracefully.
+- **Response shape:** `{target, selectors, facts, errors, resolved_at}`.
+- **Access control:** Gated by `Depends(require_tier(min_tier=2))`.
+- **Python import path:** Module also exports `async def resolve(target, mode)` for direct callers.
+
+## BACKEND — AUTO-RUN ORCHESTRATOR (PR #33 / T02)
+- **Modified:** `backend/src/app/api/missions.py`. **New:** `backend/src/app/services/auto_orchestrator.py`.
+- **Flow:** `POST /api/missions/auto-run` runs `intel_resolve` first, then fans out 14 tools — sigint, identity, surveillance, blockchain, easm, triage, adsb, aip, mesh-watchlist-check, recruit, zones, nmap, pcap, ports. DeFlock is excluded (already auto-collects).
+- **Modes:** INTEL = passive/read-only. ATTACK = INTEL plus active nmap/pcap/ports/mesh-push.
+- **Concurrency:** `asyncio.gather` fan-out. Missing selectors skip with a log line rather than blocking peer tools.
+- **Mission log:** Per-tool status, duration, and output appended into the mission log.
+- **Known limit at PR time:** The missions router was not yet mounted in `main.py` — T01 owned the mount edit; verify on merge.
+
+## NATIVE — UTT UI REFACTOR + DEAD-ZONE EXTRAPOLATION (PR #32 / T03)
+- **Modified:** `Invincible.Native/Invincible.App/Pages/Omni/UttPage.xaml` + `.cs`.
+- **Deleted:** The 15-button TOOL ASSEMBLY REGION (SIGINT, IDENTITY, SURV, BLOCKCHAIN, EASM, TRIAGE, ADSB, DEFLOCK, AIP, NMAP, PCAP, PORTS, MESH, RECRUIT, ZONES) and supporting handlers `ToolButton_Click` / `RunToolDirectAsync`.
+- **Replaced with:** AUTO-RUN STATUS panel (`ItemsRepeater x:Name="AutoRunStatusRepeater"`) rendering per-tool status pill (green/amber/red/grey), duration, and a one-line summary.
+- **Rewired `ExecuteMissionAsync`:** Calls `/api/intel/resolve` -> `/api/missions/auto-run` -> polls `/api/missions/{id}`.
+- **DeFlock button removed:** Flock cameras still auto-marked via `RefreshMapAsync`.
+- **Extrapolation:** 30s cap lifted to 150s. `IsEstimated` (>10s), `IsStale` (>60s), `IsLost` (>150s) flags drive marker brush: Green (fresh) / Amber (stale) / Red (lost). `UttMapPatrol` converted from sealed record to sealed class to permit mutable flag fields.
+- **Patrol-tracker guardrails preserved:** 1s DispatcherTimer interval unchanged; `RefreshMapAsync` cadence unchanged; `/api/intel/resolve` and `/api/missions/auto-run` calls run off the timer tick.
+
+## IN-FLIGHT (NOT YET MERGED)
+- **V01 — Vault profile accumulator backend (isolated worktree):** New `profile_accumulator.py` service. New `profiles` and `profile_scan_history` SQLite tables. Dedup by normalized identifier precedence (email > phone > MAC > wallet > domain > IP > plate > name). Deepening seeds — re-queries use cached selectors as new seeds. Mounts vault router in `main.py`. Adds `GET /api/vault/profiles` and `GET /api/vault/profile/{id}`. Wires upserts into `intel_resolve`, `identity`, and the auto_orchestrator. Dossier generator gains append-merge behavior.
+- **V03 — Vault profile UI (isolated worktree):** `VaultPage.xaml` + `.cs`. PROFILES tab is the default post-unlock. Profile list renders selectors-summary pills plus last-seen-relative. Profile detail exposes selectors chips, facts panels, and scan timeline. PIN 1337 remains the sovereign unlock.
 
